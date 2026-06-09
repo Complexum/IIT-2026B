@@ -187,7 +187,6 @@ uv.lock
 .archive/
 .archive/**
 **/.archive
-results
 
 # Profiling
 **/profiling/*

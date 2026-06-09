@@ -1,0 +1,75 @@
+/* ═══════════════════════════════════════════
+   Results Tab
+   ═══════════════════════════════════════════ */
+
+ResultsScreen {
+    height: 1fr;
+    layout: vertical;
+}
+
+#results-grid {
+    layout: grid;
+    grid-size: 2;
+    grid-columns: 52 1fr;
+    height: 1fr;
+}
+
+/* Panel izquierdo */
+
+#results-grid > #left-pane {
+    height: 100%;
+    border-right: thick $surface-lighten-2;
+    padding: 1;
+}
+
+ResultItem {
+    layout: horizontal;
+    height: auto;
+    min-height: 3;
+    max-height: 9;
+    margin-bottom: 1;
+}
+
+ResultItem .res-name {
+    width: 1fr;
+    height: auto;
+    min-height: 2;
+    max-height: 4;
+    content-align: left top;
+    text-style: none;
+    color: $text;
+    padding: 0 1;
+    text-wrap: wrap;
+}
+
+ResultItem:hover .res-name {
+    background: $surface-lighten-1;
+}
+
+ResultItem .res-del {
+    width: 3;
+    min-width: 3;
+    height: 2;
+}
+
+ResultItem.selected .res-name {
+    background: $accent;
+    color: $text;
+}
+
+/* Panel derecho */
+
+#results-grid > #right-pane {
+    height: 100%;
+    padding: 1 2;
+}
+
+.content-title {
+    text-style: bold;
+    color: $text;
+    padding-bottom: 1;
+}
+
+#result-display {
+    padding: 1;
+}
