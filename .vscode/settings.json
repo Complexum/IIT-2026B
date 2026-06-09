@@ -1,0 +1,48 @@
+{
+    // Folder icon associations - maps folder names to icon themes
+    "material-icon-theme.folders.associations": {
+        "tui": "command",
+        "dataset": "cluster",
+        "run": "scripts",
+        "strategies": "quasar",
+        "iit": "webpack",
+    },
+    "files.exclude": {
+        // "**/__pycache__": true,
+        // "**/__init__.py": true,
+    },
+    // Python interpreter: use the project's venv so scripts are in PATH
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+
+    // ====== LaTeX Workshop (build on save robusto) ======
+    // Una sola receta latexmk: ordena pdflatex/bibtex/pdflatex* por sí misma.
+    "latex-workshop.latex.tools": [
+        {
+            "name": "latexmk",
+            "command": "latexmk",
+            "args": [
+                "-pdf",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "-synctex=1",
+                "%DOC%"
+            ]
+        }
+    ],
+    "latex-workshop.latex.recipes": [
+        { "name": "latexmk", "tools": ["latexmk"] }
+    ],
+    "latex-workshop.latex.recipe.default": "latexmk",
+
+    // Clave: si un build falla (p.ej. .aux truncado por guardar a media compilación),
+    // limpia auxiliares automáticamente para que el siguiente guardado arranque limpio.
+    "latex-workshop.latex.autoClean.run": "onFailed",
+    "latex-workshop.latex.clean.fileTypes": [
+        "*.aux", "*.bbl", "*.blg", "*.out", "*.toc",
+        "*.fls", "*.fdb_latexmk", "*.synctex.gz", "*.spl"
+    ],
+
+    // Construye al guardar; root se detecta por carpeta (5 proyectos en latex/).
+    "latex-workshop.latex.autoBuild.run": "onSave"
+}

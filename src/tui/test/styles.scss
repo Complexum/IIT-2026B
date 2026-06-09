@@ -1,0 +1,155 @@
+/* ═══════════════════════════════════════════
+   Testing Tab
+   ═══════════════════════════════════════════ */
+
+TestingScreen {
+    height: 1fr;
+    layout: vertical;
+}
+
+/* Grid principal: izquierda (patrones) + derecha (cuadrantes/preview) */
+
+#test-grid {
+    layout: grid;
+    grid-size: 2;
+    grid-columns: 28 1fr;
+    height: 1fr;
+}
+
+/* ── Panel izquierdo ── */
+
+#test-grid > #left-pane {
+    height: 100%;
+    border-right: thick $surface-lighten-2;
+    padding: 1;
+}
+
+PatternItem {
+    layout: horizontal;
+    height: 3;
+}
+
+PatternItem .pat-name {
+    width: 1fr;
+}
+
+PatternItem .pat-del {
+    width: 6;
+    min-width: 6;
+}
+
+PatternItem.selected .pat-name {
+    background: $accent;
+    color: $text;
+}
+
+/* ── Panel derecho ── */
+
+#right-pane {
+    height: 1fr;
+    padding: 0 1;
+}
+
+/* Cuadrantes 2×2 */
+
+#cuadrantes {
+    layout: grid;
+    grid-size: 2;
+    height: 1fr;
+}
+
+.cuadrante {
+    border: solid $primary;
+    padding: 1;
+    margin: 0 1 1 0;
+}
+
+.cuad-header {
+    height: auto;
+    padding-bottom: 1;
+}
+
+.cuad-header Label {
+    width: auto;
+    padding: 0 1;
+    text-style: bold;
+    color: $accent;
+}
+
+.cuad-header Select {
+    width: 1fr;
+}
+
+.cuad-header Button {
+    width: 5;
+    min-width: 5;
+}
+
+.gen-list {
+    height: 1fr;
+}
+
+GeneratorItem {
+    layout: horizontal;
+    height: 3;
+}
+
+GeneratorItem .gen-name {
+    width: 1fr;
+    padding: 0 1;
+    content-align: left middle;
+}
+
+GeneratorItem .gen-del {
+    width: 5;
+    min-width: 5;
+}
+
+/* Footer editar */
+
+#footer-editar {
+    height: auto;
+    padding: 1 0;
+}
+
+#footer-editar Label {
+    width: 1fr;
+    padding: 0 1;
+}
+
+/* ── Vista preview ── */
+
+#vista-preview {
+    height: 1fr;
+}
+
+#preview-toolbar {
+    height: auto;
+    padding: 1;
+}
+
+#preview-toolbar Label {
+    width: auto;
+    padding: 0 1;
+}
+
+#preview-toolbar Input {
+    width: 12;
+}
+
+#preview-scroll {
+    height: 1fr;
+    border: solid $primary;
+    padding: 1;
+    margin: 0 1;
+}
+
+#footer-preview {
+    height: auto;
+    padding: 1 0;
+}
+
+#footer-preview Label {
+    width: 1fr;
+    padding: 0 1;
+}

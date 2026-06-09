@@ -1,0 +1,128 @@
+/* ═══════════════════════════════════════════
+   Dataset Tab — Bento-style layout
+   ═══════════════════════════════════════════ */
+
+DatasetScreen {
+    height: 1fr;
+    layout: vertical;
+}
+
+/* ── Row 1: Toolbar ── */
+
+#toolbar {
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+    border-bottom: thick $surface-lighten-2;
+}
+
+#toolbar Input {
+    width: 16;
+    margin-right: 2;
+}
+
+#toolbar Label {
+    padding: 1 2;
+    width: auto;
+    color: $text-muted;
+}
+
+#toolbar Checkbox {
+    width: auto;
+    padding: 0 2;
+}
+
+#toolbar Button {
+    width: auto;
+}
+
+/* ── Row 2: Main area (grid: 2 columns) ── */
+
+#main-area {
+    layout: grid;
+    grid-size: 2;
+    grid-columns: 30 1fr;
+    height: 1fr;
+}
+
+/* Left pane: network list */
+
+#left-pane {
+    height: 100%;
+    border-right: thick $surface-lighten-2;
+    padding: 1;
+}
+
+.pane-title {
+    text-style: bold;
+    color: $accent;
+    padding-bottom: 1;
+}
+
+/* Network item: [Name button] [✕ button] */
+
+NetworkItem {
+    layout: horizontal;
+    height: 3;
+}
+
+NetworkItem .net-name {
+    width: 1fr;
+}
+
+NetworkItem .net-del {
+    width: 6;
+    min-width: 6;
+}
+
+NetworkItem.selected .net-name {
+    background: $accent;
+    color: $text;
+}
+
+/* Right pane: inputs + 3 display columns */
+
+#right-pane {
+    height: 1fr;
+    padding: 0 1;
+}
+
+#inputs-row {
+    height: auto;
+    padding: 1 0;
+}
+
+.inp-group {
+    width: 1fr;
+    height: auto;
+    margin: 0 1;
+}
+
+.inp-label {
+    height: 1;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+.inp-group Input {
+    width: 100%;
+}
+
+/* Three scrollable display columns */
+
+#display-row {
+    height: 1fr;
+}
+
+.display-col {
+    width: 1fr;
+    border: solid $primary;
+    margin: 0 1;
+    padding: 1;
+}
+
+.col-title {
+    text-style: bold;
+    color: $accent;
+    padding-bottom: 1;
+}

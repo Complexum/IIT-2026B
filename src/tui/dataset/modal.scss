@@ -1,0 +1,29 @@
+/* ═══════════════════════════════════════════
+   Modal de confirmación — carga de redes grandes
+   ═══════════════════════════════════════════ */
+
+ConfirmarCargaModal {
+    align: center middle;
+}
+
+ConfirmarCargaModal>Container {
+    width: 60;
+    height: auto;
+    border: thick $warning;
+    background: $surface;
+    padding: 1 2;
+}
+
+ConfirmarCargaModal Label {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+ConfirmarCargaModal .modal-btns {
+    margin-top: 1;
+    align-horizontal: right;
+}
+
+ConfirmarCargaModal Button {
+    margin-left: 1;
+}

@@ -1,0 +1,9 @@
+{
+  "nombre": "program-08",
+  "dataset": "N21B",
+  "patron": "patron-2",
+  "estrategia": "phi",
+  "estado": "completado",
+  "inicio": 0.0,
+  "progreso": 100.0
+}

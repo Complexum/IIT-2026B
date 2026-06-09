@@ -1,0 +1,9 @@
+{
+  "nombre": "program-09",
+  "dataset": "N22B",
+  "patron": "patron-2",
+  "estrategia": "qn",
+  "estado": "pendiente",
+  "inicio": 0.0,
+  "progreso": 0.0
+}

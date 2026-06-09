@@ -1,0 +1,112 @@
+/* ═══════════════════════════════════════════
+   Compare Tab
+   ═══════════════════════════════════════════ */
+
+AnalysisScreen {
+    height: 1fr;
+    layout: vertical;
+}
+
+#cmp-grid {
+    layout: grid;
+    grid-size: 2;
+    grid-columns: 52 1fr;
+    height: 1fr;
+}
+
+/* Panel izquierdo */
+
+#cmp-left {
+    height: 100%;
+    border-right: thick $surface-lighten-2;
+    padding: 1;
+}
+
+/* ResultCheckbox */
+
+ResultCheckbox {
+    height: auto;
+    min-height: 2;
+    max-height: 6;
+    margin-bottom: 1;
+}
+
+ResultCheckbox .cb-row {
+    layout: horizontal;
+    height: auto;
+}
+
+ResultCheckbox .cb-box {
+    width: 3;
+    height: auto;
+    content-align: center middle;
+    color: $text;
+}
+
+ResultCheckbox .cb-label {
+    width: 1fr;
+    height: auto;
+    text-wrap: wrap;
+    content-align: left top;
+    color: $text;
+}
+
+ResultCheckbox:hover {
+    background: $surface-lighten-1;
+}
+
+ResultCheckbox.selected {
+    background: $accent 20%;
+}
+
+/* Panel derecho */
+
+#cmp-right {
+    layout: vertical;
+    height: 100%;
+}
+
+#cmp-controls {
+    layout: horizontal;
+    height: auto;
+    padding: 1 1;
+    align: left middle;
+    border-bottom: thick $surface-lighten-2;
+}
+
+#cmp-tol-label {
+    width: auto;
+    padding-right: 1;
+}
+
+#cmp-tol-input {
+    width: 12;
+}
+
+#cmp-btn {
+    margin-left: 1;
+}
+
+#cmp-plot-btn {
+    margin-left: 1;
+}
+
+#cmp-output {
+    height: 1fr;
+    padding: 1 2;
+}
+
+.content-title {
+    text-style: bold;
+    color: $text;
+    padding-bottom: 1;
+}
+
+#cmp-summary {
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+#cmp-table {
+    padding-bottom: 1;
+}

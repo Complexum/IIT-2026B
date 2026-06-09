@@ -1,0 +1,23 @@
+/* ═══════════════════════════════════════════
+   Global TUI styles — cargado por MIPApp
+   ═══════════════════════════════════════════ */
+
+Screen {
+    layout: vertical;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+/* ── Shared: título de paneles laterales ── */
+
+.pane-title {
+    text-style: bold;
+    color: $accent;
+    padding-bottom: 1;
+}
+
+.info-label {
+    margin-bottom: 1;
+}

@@ -1,0 +1,86 @@
+/* ═══════════════════════════════════════════
+   Execution Tab
+   ═══════════════════════════════════════════ */
+
+ExecutionScreen {
+    height: 1fr;
+    layout: vertical;
+}
+
+/* Toolbar */
+
+#exec-toolbar {
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+}
+
+#exec-toolbar Button {
+    width: auto;
+    margin-right: 2;
+}
+
+.toolbar-titulo {
+    text-style: bold;
+    color: $accent;
+    padding: 1 0;
+}
+
+/* Lista de programas */
+
+#exec-lista {
+    height: 1fr;
+    padding: 1;
+}
+
+/* ── ProgramCard ── */
+
+ProgramCard {
+    layout: vertical;
+    height: auto;
+    margin-bottom: 1;
+    padding: 1;
+    border: solid $surface-lighten-2;
+}
+
+.card-header {
+    height: auto;
+    padding-bottom: 1;
+}
+
+.card-header .card-titulo {
+    width: 1fr;
+    text-style: bold;
+    color: $text;
+    padding: 0 1;
+}
+
+.card-header .card-del {
+    width: 5;
+    min-width: 5;
+}
+
+.card-selectores {
+    height: auto;
+    padding-bottom: 1;
+}
+
+.card-select {
+    width: 1fr;
+    margin: 0 1;
+}
+
+.card-selectores .btn-empezar {
+    width: auto;
+}
+
+.card-progress {
+    width: 1fr;
+    margin: 0 1;
+}
+
+.card-tiempo {
+    width: auto;
+    padding: 0 1;
+    color: $text-muted;
+}

@@ -1,0 +1,9 @@
+{
+  "nombre": "program-03",
+  "dataset": "N12B",
+  "patron": "patron-2",
+  "estrategia": "qn_mpi",
+  "estado": "completado",
+  "inicio": 0.0,
+  "progreso": 100.0
+}

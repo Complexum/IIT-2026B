@@ -1,0 +1,17 @@
+{
+  "dataset": "N15B",
+  "patron": "patron-2",
+  "estrategia": "analytic_cuda",
+  "n_total": 96,
+  "cancelado": false,
+  "timestamp_fin": "2026-06-08T17:40:38",
+  "n_completados": 96,
+  "tiempo_total_s": 3.1762,
+  "tiempo_medio_s": 0.0331,
+  "tiempo_min_s": 0.0,
+  "tiempo_max_s": 2.1557,
+  "perdida_media": 0.002599,
+  "perdida_min": 0.0,
+  "perdida_max": 0.020348,
+  "plataforma": "Windows:AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD:0GB-RAM"
+}

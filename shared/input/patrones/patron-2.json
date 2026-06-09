@@ -1,0 +1,24 @@
+{
+  "nombre": "patron-2",
+  "estados": [
+    "inicial",
+    "pares"
+  ],
+  "condiciones": [
+    "todos",
+    "no_inicial",
+    "no_final"
+  ],
+  "alcances": [
+    "todos",
+    "no_mult_4",
+    "impares",
+    "pares"
+  ],
+  "mecanismos": [
+    "todos",
+    "no_mult_4",
+    "impares",
+    "pares"
+  ]
+}
