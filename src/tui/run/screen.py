@@ -4,6 +4,9 @@ Cada programa combina: dataset + patrón de prueba + estrategia.
 """
 
 import csv
+import os
+import signal
+import subprocess
 import time
 from pathlib import Path
 
@@ -16,14 +19,16 @@ from textual.widgets import Button, Label, Rule
 from src.iit.core.params import Params
 from src.iit.strategies.runner import ejecutar
 from src.infra.middlewares.slogger import get_logger
-from src.io.manager import cargar_mpt
+from src.io.manager import cargar_mpt, dims_de_red
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
     Programa,
+    build_mpi_command,
     build_output_stem,
     cargar_meta_programa,
     cargar_programa,
     eliminar_programa,
+    es_estrategia_mpi,
     guardar_meta_completo,
     guardar_meta_programa,
     guardar_programa,
@@ -60,6 +65,7 @@ class ExecutionScreen(Widget):
 
     def on_mount(self) -> None:
         self._cancelando: set[str] = set()
+        self._mpi_procesos: dict[str, subprocess.Popen] = {}
         self.__refrescar_programas()
 
     # ── Eventos ──
@@ -71,7 +77,14 @@ class ExecutionScreen(Widget):
     def on_program_card_iniciado(self, event: ProgramCard.Iniciado) -> None:
         """Empezar ejecución real de un programa en hilo de fondo."""
         self.__update_card_ejecutando(event.nombre, True)
-        self._ejecutar_programa(event.nombre)
+        try:
+            prog = cargar_programa(event.nombre)
+        except Exception:
+            prog = None
+        if prog and es_estrategia_mpi(prog.estrategia):
+            self._ejecutar_programa_mpi(event.nombre)
+        else:
+            self._ejecutar_programa(event.nombre)
 
     def on_program_card_cancelado(self, event: ProgramCard.Cancelado) -> None:
         """Señalar al worker que debe detenerse; feedback visual inmediato."""
@@ -264,6 +277,134 @@ class ExecutionScreen(Widget):
         except Exception as e:
             log.error(f"Failed to execute program '{nombre}': {type(e).__name__}: {e}")
             self.app.call_from_thread(self.__update_card_ejecutando, nombre, False)
+
+    @work(thread=True)
+    def _ejecutar_programa_mpi(self, nombre: str) -> None:
+        """Lanzar estrategia MPI como subproceso (mpiexec) y monitorear progreso vía CSV."""
+        try:
+            prog = cargar_programa(nombre)
+            if not prog.dataset or not prog.patron or not prog.estrategia:
+                log.warn(f"Program '{nombre}' missing dataset/patron/estrategia")
+                return
+
+            n_dims = dims_de_red(prog.dataset)
+            patron = cargar_patron(prog.patron)
+            combis = generar_combinaciones(patron, n_dims)
+            total = len(combis)
+
+            if total == 0:
+                log.warn(f"Program '{nombre}': patron produces 0 combinations")
+                return
+
+            output_stem = build_output_stem(
+                nombre, prog.dataset, prog.patron, prog.estrategia
+            )
+            output_path = OUTPUT_DIR / f"{output_stem}.csv"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path = OUTPUT_DIR / f"{output_stem}.mpi.log"
+
+            completados = cargar_indices_completados(output_path)
+            meta = cargar_meta_programa(output_stem)
+            params_actuales = {
+                "dataset": prog.dataset,
+                "patron": prog.patron,
+                "estrategia": prog.estrategia,
+            }
+            checkpoint_valido = bool(completados) and meta is not None and all(
+                meta.get(k) == v for k, v in params_actuales.items()
+            )
+            if not checkpoint_valido:
+                completados = set()
+                guardar_meta_programa(output_stem, prog)
+
+            prog.estado = "ejecutando"
+            guardar_programa(prog)
+
+            progreso_inicial = len(completados) / total * 100
+            self.app.call_from_thread(
+                self.__update_card_progress, nombre, progreso_inicial
+            )
+            self.app.call_from_thread(
+                self.__update_card_combo,
+                nombre,
+                f"Lanzando MPI ({prog.n_procs} procesos)…",
+            )
+
+            cmd = build_mpi_command(prog)
+            cancelado = False
+            with log_path.open("w", encoding="utf-8") as logf:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=logf,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+                self._mpi_procesos[nombre] = proc
+
+                self.app.call_from_thread(
+                    self.__update_card_combo, nombre, f"Ejecutando: {' '.join(cmd)}"
+                )
+
+                while proc.poll() is None:
+                    if nombre in self._cancelando:
+                        self._cancelando.discard(nombre)
+                        cancelado = True
+                        self.__terminar_proceso_mpi(proc)
+                        break
+                    time.sleep(1.0)
+                    n_completados = len(cargar_indices_completados(output_path))
+                    progreso = n_completados / total * 100
+                    self.app.call_from_thread(
+                        self.__update_card_progress, nombre, progreso
+                    )
+                    self.app.call_from_thread(
+                        self.__update_card_combo,
+                        nombre,
+                        f"MPI ({prog.n_procs} procesos) — {n_completados}/{total}",
+                    )
+
+                returncode = proc.wait()
+
+            self._mpi_procesos.pop(nombre, None)
+
+            n_completados = len(cargar_indices_completados(output_path))
+            guardar_meta_completo(output_stem, prog, total, cancelado, output_path)
+
+            if cancelado:
+                prog.estado = "pendiente"
+                combo = f"Cancelado — {n_completados}/{total} completados"
+            elif returncode != 0:
+                prog.estado = "error"
+                combo = f"Error MPI (code {returncode}) — ver {log_path}"
+            else:
+                prog.estado = "completado"
+                prog.progreso = 100.0
+                combo = f"Completado — {total} tests (MPI)"
+
+            guardar_programa(prog)
+            self.app.call_from_thread(
+                self.__update_card_progress, nombre, n_completados / total * 100
+            )
+            self.app.call_from_thread(self.__update_card_combo, nombre, combo)
+            self.app.call_from_thread(self.__refrescar_results)
+            self.app.call_from_thread(self.__update_card_ejecutando, nombre, False)
+
+        except Exception as e:
+            log.error(
+                f"Failed to execute MPI program '{nombre}': {type(e).__name__}: {e}"
+            )
+            self._mpi_procesos.pop(nombre, None)
+            self.app.call_from_thread(self.__update_card_ejecutando, nombre, False)
+
+    def __terminar_proceso_mpi(self, proc: subprocess.Popen) -> None:
+        """Termina mpiexec y sus procesos hijos (grupo de proceso)."""
+        try:
+            if hasattr(os, "killpg"):
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            else:
+                proc.terminate()
+        except ProcessLookupError:
+            pass
 
     def __update_card_progress(self, nombre: str, progreso: float) -> None:
         for card in self.query(ProgramCard):

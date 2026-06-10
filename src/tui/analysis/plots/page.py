@@ -83,7 +83,7 @@ def generate_analysis_page(
     tol: float = 1e-4,
 ) -> Path:
     """Genera HTML multi-sección: tiempos, box-plots, error relativo, correlación."""
-    from src.paper.loader import load_all_groups
+    from src.io.loader import load_all_groups
 
     all_names = [n for names in groups.values() for n in names]
     groups_data = load_all_groups(all_names)

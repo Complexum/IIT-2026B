@@ -234,7 +234,7 @@ class AnalysisScreen(Widget):
         # Paper figures (matplotlib)
         paper_paths: list[Path] = []
         try:
-            from src.paper.plots import generate_paper_figures
+            from src.io.plots import generate_paper_figures
 
             paper_paths = generate_paper_figures(sel, _OUTPUT_DIR, _PICS_DIR, reference)
         except Exception as exc:

@@ -8,11 +8,16 @@ import datetime
 import json
 import logging
 import re
-from dataclasses import asdict, dataclass
+import shlex
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 PROGRAMAS_DIR = Path("data/input/programas")
 _META_DIR = Path("data/output")
+
+DEFAULT_MPI_TEMPLATE = (
+    "mpiexec -n {n_procs} python -m mpi4py.futures -m src.cli run execution {nombre}"
+)
 
 
 def _natural_key(s: str) -> list:
@@ -30,6 +35,8 @@ class Programa:
     estado: str = "pendiente"  # pendiente | ejecutando | completado | error
     inicio: float = 0.0
     progreso: float = 0.0
+    n_procs: int = 4
+    exec_template: str = DEFAULT_MPI_TEMPLATE
 
 
 # ── Sidecar metadata (checkpoint invalidation) ───────────
@@ -141,6 +148,11 @@ def cargar_programa(nombre: str) -> Programa:
     """Cargar programa desde JSON con validación de estrategia."""
     ruta = PROGRAMAS_DIR / f"{nombre}.json"
     datos = json.loads(ruta.read_text(encoding="utf-8"))
+
+    # Ignorar claves obsoletas/renombradas de versiones previas del esquema
+    campos_validos = {f.name for f in fields(Programa)}
+    datos = {k: v for k, v in datos.items() if k in campos_validos}
+
     programa = Programa(**datos)
 
     # Validar y migrar estrategia
@@ -186,7 +198,7 @@ def eliminar_programa(nombre: str) -> bool:
 def siguiente_nombre_programa() -> str:
     """Genera prog-01, prog-02, ..."""
     existentes = set(listar_programas())
-    i = 1
+    i = 0
     while f"program-{i:02d}" in existentes:
         i += 1
     return f"program-{i:02d}"
@@ -220,6 +232,18 @@ def validar_estrategia(estrategia: str, estrategias_disponibles: list[str]) -> s
 
     # Si no es válido ni migrable, retornar string vacío
     return ""
+
+
+def es_estrategia_mpi(estrategia: str) -> bool:
+    """Estrategias que requieren mpiexec multi-proceso (no corren en hilo)."""
+    return estrategia.endswith("_mpi")
+
+
+def build_mpi_command(prog: "Programa") -> list[str]:
+    """Construye el argv para subprocess.Popen a partir de prog.exec_template."""
+    template = prog.exec_template or DEFAULT_MPI_TEMPLATE
+    cmd_str = template.format(n_procs=prog.n_procs, nombre=prog.nombre)
+    return shlex.split(cmd_str)
 
 
 def listar_estrategias() -> list[str]:
