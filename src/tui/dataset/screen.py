@@ -22,7 +22,7 @@ from src.tui.dataset.helpers import formatear_sistema, parsear_estado, parsear_i
 from src.tui.dataset.modal import DIMS_WARN_THRESHOLD, ConfirmarCargaModal
 from src.tui.dataset.widgets import NetworkItem
 from src.tui.shared.consts import estilizar
-
+import numpy as np
 
 class DatasetScreen(Widget):
     """Dataset tab: view, create, and operate on networks."""
@@ -46,9 +46,7 @@ class DatasetScreen(Widget):
             # )
             yield Button("+ New", variant="primary", id="btn-new")
             # Optimización por red: genera un sidecar .npy (mmap) sin tocar el CSV.
-            yield Checkbox(
-                "Optimizar .npy", id="chk-optimizar", value=False, disabled=True
-            )
+            yield Checkbox("Optimizar .npy", id="chk-optimizar", value=True)
 
         # Row 2: Two-column bento grid
         with Container(id="main-area"):
@@ -101,6 +99,7 @@ class DatasetScreen(Widget):
         try:
             chk.disabled = not name
             chk.value = bool(name) and red_optimizada(name)
+            chk.refresh()
         finally:
             self.__sync_optimizar = False
 
@@ -153,7 +152,6 @@ class DatasetScreen(Widget):
         name = self.selected_network
         if not name:
             return
-        event.checkbox.disabled = True  # bloquear hasta terminar
         self.__toggle_optimizacion(name, event.value)
 
     @work(thread=True, exclusive=True)
@@ -228,16 +226,15 @@ class DatasetScreen(Widget):
     def __create_network(self) -> None:
         """Create a new network CSV from the toolbar inputs."""
         inp = self.query_one("#inp-dims", Input)
-        chk = self.query_one("#chk-discretos", Checkbox)
+        chk_discretos = self.query_one("#chk-discretos", Checkbox)
+        chk_optimizar = self.query_one("#chk-optimizar", Checkbox)
         try:
             dims = int(inp.value)
             if not (1 <= dims <= 30):
                 return
         except (ValueError, TypeError):
             return
-        # generar_red siempre crea un nombre nuevo (no sobreescribe), así que
-        # no hay TPM cacheada que invalidar aquí.
-        generar_red(dims, datos_deterministas=chk.value)
+        generar_red(dims, datos_deterministas=chk_discretos.value, optimizar=chk_optimizar.value)
         self.__refresh_network_list()
         self.__notify_execution_refresh()
 
