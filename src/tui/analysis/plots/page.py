@@ -13,13 +13,13 @@ from src.tui.analysis.plots.common import (
 from src.tui.analysis.plots.correlation import _build_corr_fig
 from src.tui.analysis.plots.resource import _build_resource_fig
 from src.tui.analysis.plots.time import _build_time_fig
-from src.tui.analysis.plots.waterfall import _build_waterfall_fig
+# from src.tui.analysis.plots.waterfall import _build_waterfall_fig
 
 
 _RESOURCE_HTML_TEMPLATE = """\
 <div class="section" id="{section_id}">
   <h2>{title}</h2>
-  <p class="meta">Una línea por estrategia · línea punteada = promedio</p>
+  <p class="meta">{meta}</p>
   {content}
 </div>
 """
@@ -57,7 +57,6 @@ _HTML_TEMPLATE = """\
   <a href="#tiempos">Tiempos</a>
   <a href="#boxplots">Box-plots</a>
   <a href="#correlacion">Correlación</a>
-  <a href="#waterfall">Δt vs {ref}</a>
   {resource_nav}
 </nav>
 
@@ -77,12 +76,6 @@ _HTML_TEMPLATE = """\
   <h2>Correlación vs {ref}</h2>
   <p class="meta">Scatter Φ_strat vs Φ_ref · verde = dentro de tol · rojo = fuera</p>
   {corr_html}
-</div>
-
-<div class="section" id="waterfall">
-  <h2>Δt vs {ref} (s)</h2>
-  <p class="meta">Diferencia de tiempo vs baseline · positivo = más lento · negativo = más rápido</p>
-  {waterfall_html}
 </div>
 
 {resource_sections}
@@ -123,14 +116,18 @@ def generate_analysis_page(
 
     resource_nav_items = ""
     resource_sections = ""
+    box_metrics = {"cpu_sys_s", "mem_rss_mb"}
     for metric, label in RESOURCE_METRICS:
         section_id = metric.replace("_", "-")
-        fig = _build_resource_fig(groups_data, rows, cols, metric, label)
+        plot_type = "box" if metric in box_metrics else "line"
+        fig = _build_resource_fig(groups_data, rows, cols, metric, label, plot_type=plot_type)
         content = fig.to_html(full_html=False, include_plotlyjs=False)
+        meta_description = "Un box-plot por estrategia · línea discontinua = media" if plot_type == "box" else "Una línea por estrategia · línea punteada = promedio"
         resource_sections += _RESOURCE_HTML_TEMPLATE.format(
             section_id=section_id,
             title=label,
             content=content,
+            meta=meta_description,
         )
         resource_nav_items += (
             f'\n  <a href="#{section_id}">{label.split("(")[0].strip()}</a>'
@@ -140,7 +137,6 @@ def generate_analysis_page(
         ref=ref_used,
         time_html=time_html,
         box_html=box_html,
-        # waterfall_html=waterfall_html,
         corr_html=corr_html,
         resource_nav=resource_nav_items,
         resource_sections=resource_sections,
