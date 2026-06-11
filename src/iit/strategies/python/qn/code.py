@@ -34,13 +34,11 @@ subconjunto — el pre-pass de singletons cubre la causa de fallo más común.
 import time
 from typing import Union
 
-import numpy as np
-
 from src.iit.base.consts import ACTUAL, EFFECT, FLOAT_ZERO, INFTY_POS, INT_ZERO
 from src.iit.base.funcs import emd_efecto
 from src.iit.core.solution import Solution
-from src.iit.strategies.python.analytic.code import hyperfaces
 from src.iit.strategies.python.fmt import fmt_parts
+from src.iit.strategies.python.qn.oracle import f_cara, preparar_oraculo
 from src.iit.strategies.python.sia import SIA
 
 # Un vértice es una 2-tupla (tiempo, valor); un grupo es una lista (anidable) de vértices.
@@ -69,7 +67,7 @@ class QNodes(SIA, nombre="qn"):
             )
 
         # Precómputo Zeta: todas las sumas de cara en O(D·N·2^D), una sola vez.
-        self.__preparar_oraculo()
+        self._oraculo = preparar_oraculo(self.sistema)
 
         futuro = tuple((EFFECT, idx) for idx in indices)
         presente = tuple((ACTUAL, dim) for dim in dims)
@@ -96,54 +94,6 @@ class QNodes(SIA, nombre="qn"):
             tiempo_total=time.perf_counter() - t0,
             quiere_hablar=False,
         )
-
-    # ── Oráculo Zeta (caras precomputadas) ─────────────────────────────────
-    def __preparar_oraculo(self) -> None:
-        """Precomputa ``sumas[i, m]`` (Zeta sobre δ = H − p) y los mapas auxiliares."""
-        sistema = self.sistema
-        dims = sistema.dims
-        self._D = len(dims)
-        self._full_mask = (1 << self._D) - 1
-        # mask bit d ↔ dims[d]  (mismo convenio que analytic.hyperfaces)
-        self._pos_dim = {d: i for i, d in enumerate(dims)}
-        self._indices_order = np.fromiter(
-            (c.indice for c in sistema.ncubos), dtype=np.int64
-        )
-
-        data_nd = np.stack([c.ndata for c in sistema.ncubos])
-        N = data_nd.shape[0]
-        pivot_idx = tuple(int(sistema.estado_inicial[d]) for d in dims)
-        pivot_vals = data_nd[(slice(None),) + pivot_idx]  # (N,)
-        # Normalización firmada: δ = H − p (pivote queda en 0).
-        delta_nd = data_nd - pivot_vals.reshape((N,) + (1,) * self._D)
-        self._sumas = hyperfaces(N, self._D, delta_nd, pivot_idx)
-
-    def __f_cara(
-        self, alcance: tuple[int, ...], mecanismo: tuple[int, ...]
-    ) -> float:
-        """EMD del corte ``(alcance, mecanismo)`` leído de las sumas precomputadas.
-
-        Reproduce ``emd_efecto(bipartir(alc, mec).distribucion_marginal(), ρ)``:
-        cada cubo aporta |mean_{complemento(mec)}(δ)| si está en ``alcance``,
-        o |mean_{mec}(δ)| en caso contrario.
-        """
-        m = 0
-        for d in mecanismo:
-            m |= 1 << self._pos_dim[d]
-        cmask = self._full_mask ^ m
-        sz_a = bin(m).count("1")
-
-        val_a = np.abs(self._sumas[:, m]) / (1 << sz_a)            # |mean_mec(δ)|
-        val_b = np.abs(self._sumas[:, cmask]) / (1 << (self._D - sz_a))  # |mean_compl(δ)|
-
-        if alcance:
-            in_alc = np.isin(
-                self._indices_order, np.fromiter(alcance, dtype=np.int64)
-            )
-            cost = np.where(in_alc, val_b, val_a)
-        else:
-            cost = val_a
-        return float(cost.sum())
 
     # ── Algoritmo Q ────────────────────────────────────────────────────────
     def algorithm(self, vertices: list):
@@ -215,7 +165,7 @@ class QNodes(SIA, nombre="qn"):
         if cacheado is not None:
             return cacheado, clave
 
-        emd = self.__f_cara(alcance, mecanismo)
+        emd = f_cara(self._oraculo, alcance, mecanismo)
         self.memoria_bipart[clave] = emd
         return emd, clave
 

@@ -17,8 +17,8 @@ def load_result(name: str) -> pl.DataFrame:
     """Carga un CSV de resultado y renombra las columnas de interés."""
     return (
         pl.read_csv(RESULTADOS_DIR / f"{name}.csv", infer_schema_length=0)
-        .select(["indice", "perdida", "tiempo"])
-        .rename({"perdida": f"perdida_{name}", "tiempo": f"tiempo_{name}"})
+        .select(["indice", "perdida", "tiempo_wall_s"])
+        .rename({"perdida": f"perdida_{name}", "tiempo_wall_s": f"tiempo_{name}"})
         .with_columns(
             pl.col("indice").cast(pl.Int64),
             pl.col(f"perdida_{name}").cast(pl.Float64),
@@ -107,13 +107,13 @@ def compare_group_n(names: list[str], tol: float) -> dict:
         try:
             df = (
                 pl.read_csv(RESULTADOS_DIR / f"{name}.csv", infer_schema_length=0)
-                .select(["indice", "perdida", "tiempo"])
+                .select(["indice", "perdida", "tiempo_wall_s"])
                 .with_columns(
                     pl.col("indice").cast(pl.Int64),
                     pl.col("perdida").cast(pl.Float64).alias(estrategia),
-                    pl.col("tiempo").cast(pl.Float64).alias(f"{estrategia}_t"),
+                    pl.col("tiempo_wall_s").cast(pl.Float64).alias(f"{estrategia}_t"),
                 )
-                .drop("perdida", "tiempo")
+                .drop("perdida", "tiempo_wall_s")
             )
         except Exception:
             continue  # CSV vacío o corrupto

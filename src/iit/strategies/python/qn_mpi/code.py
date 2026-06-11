@@ -1,20 +1,22 @@
-"""Estrategia QNodes-MPI: algoritmo Q sobre EMD real, paralelizado con MPI (mpi4py).
+"""Estrategia QNodes-MPI: algoritmo Q con oráculo Zeta, paralelizado con MPI (mpi4py).
 
-Mismo algoritmo Q que ``qn`` (singletons + pares colgantes, EMD real exacta), pero la
-evaluación de cada **batch de cortes independientes** (pre-pass de singletons y los
-``loss(delta ∪ omega)`` de cada paso MAO) se reparte entre ranks MPI con
-``mpi4py.futures.MPIPoolExecutor``. El driver sigue secuencial (rank 0); solo el cálculo
-de biparticiones se distribuye.
+Mismo algoritmo Q que ``qn`` (singletons + pares colgantes), incluyendo el **mismo
+oráculo Zeta** (``qn.oracle.preparar_oraculo`` / ``f_cara``) para rankear candidatos
+durante el MAO — bit-idéntico a ``qn``. La evaluación de cada **batch de cortes
+independientes** (pre-pass de singletons y los ``f_cara(delta ∪ omega)`` de cada paso
+MAO) se reparte entre ranks MPI con ``mpi4py.futures.MPIPoolExecutor``. El driver sigue
+secuencial (rank 0); solo el cálculo de ``f_cara`` se distribuye.
 
-Cada worker reutiliza ``System.bipartir + distribucion_marginal + emd_efecto`` verbatim →
-resultado **idéntico** a ``qn``.
+Al final, igual que ``qn``, se recalcula ``(distribucion_particion, perdida)`` del MIP
+ganador con ``System.bipartir + distribucion_marginal + emd_efecto`` reales.
 
 Ejecución (cluster):
     uv pip install -e ".[mpi]"
     mpiexec -n <P> python -m mpi4py.futures -m src.cli run execution <name>
 
 Hard-fail: sin ``mpi4py`` instalado, ``resolver`` lanza ``RuntimeError`` (la estrategia
-sigue registrada y visible en CLI).
+sigue registrada y visible en CLI). Nota: el oráculo (``sumas (N, 2^D)``) se difunde a
+cada rank vía initializer (one-time); para D grande es el cuello de botella de red.
 """
 
 import time
@@ -22,8 +24,8 @@ import time
 from src.iit.base.consts import ACTUAL, EFFECT, FLOAT_ZERO, INFTY_POS, INT_ZERO
 from src.iit.base.funcs import emd_efecto
 from src.iit.core.solution import Solution
-from src.iit.core.system import System
 from src.iit.strategies.python.fmt import fmt_parts
+from src.iit.strategies.python.qn.oracle import Oraculo, f_cara, preparar_oraculo
 from src.iit.strategies.python.sia import SIA
 
 Vertice = tuple[int, int]
@@ -33,22 +35,19 @@ Corte = tuple[tuple[int, ...], tuple[int, ...]]  # (alcance, mecanismo)
 MIN_BATCH_PARALELO = 16
 
 # ── Estado del worker (poblado por el initializer del executor) ────────────
-_W_SYS: System | None = None
-_W_DM = None
+_W_ORACULO: Oraculo | None = None
 
 
-def _init_worker(sistema: System, dm_original) -> None:
-    global _W_SYS, _W_DM
-    _W_SYS = sistema
-    _W_DM = dm_original
+def _init_worker(oraculo: Oraculo) -> None:
+    global _W_ORACULO
+    _W_ORACULO = oraculo
 
 
 def _eval_cut(corte: Corte):
-    """Worker MPI: EMD real del corte (alcance, mecanismo)."""
+    """Worker MPI: EMD del corte (alcance, mecanismo) vía oráculo Zeta."""
     alcance, mecanismo = corte
-    dist = _W_SYS.bipartir(alcance, mecanismo).distribucion_marginal()
-    emd = float(emd_efecto(dist, _W_DM))
-    return corte, emd, dist
+    emd = f_cara(_W_ORACULO, alcance, mecanismo)
+    return corte, emd
 
 
 class QNodesMPI(SIA, nombre="qn_mpi"):
@@ -88,26 +87,31 @@ class QNodesMPI(SIA, nombre="qn_mpi"):
                 quiere_hablar=False,
             )
 
+        # Precómputo Zeta: todas las sumas de cara en O(D·N·2^D), una sola vez.
+        self._oraculo = preparar_oraculo(self.sistema)
+
         futuro = tuple((EFFECT, idx) for idx in indices)
         presente = tuple((ACTUAL, dim) for dim in dims)
 
-        self.memoria_bipart: dict[Corte, tuple] = {}
-        self.memoria_grupo_candidato: dict[Corte, tuple] = {}
+        self.memoria_bipart: dict[Corte, float] = {}
+        self.memoria_grupo_candidato: dict[Corte, float] = {}
 
         vertices = list(presente + futuro)
         with MPIPoolExecutor(
-            initializer=_init_worker, initargs=(self.sistema, dm_original)
+            initializer=_init_worker, initargs=(self._oraculo,)
         ) as executor:
             self._executor = executor
             mip = self.algorithm(vertices)
 
-        perdida_mip, dist_mip = self.memoria_grupo_candidato[mip]
+        # Reconstrucción exacta del MIP ganador: una marginalización real + EMD real.
         alcance, mecanismo = mip
+        dist_mip = self.sistema.bipartir(alcance, mecanismo).distribucion_marginal()
+        perdida_mip = float(emd_efecto(dist_mip, dm_original))
         texto = fmt_parts((alcance, mecanismo), (indices, dims))
 
         return Solution(
             estrategia=self.nombre.capitalize(),
-            perdida=float(perdida_mip),
+            perdida=perdida_mip,
             distribucion_subsistema=dm_original,
             distribucion_particion=dist_mip,
             particion=texto.strip(),
@@ -134,10 +138,10 @@ class QNodesMPI(SIA, nombre="qn_mpi"):
                 emd_local = INFTY_POS
                 indice_mip = INT_ZERO
                 for k, dk in enumerate(deltas_ciclo):
-                    emd_delta = self.memoria_bipart[self.__cut_key([dk])][INT_ZERO]
+                    emd_delta = self.memoria_bipart[self.__cut_key([dk])]
                     emd_union = self.memoria_bipart[
                         self.__cut_key([dk, *omegas_ciclo])
-                    ][INT_ZERO]
+                    ]
                     ganancia = emd_union - emd_delta
                     if ganancia < emd_local:
                         emd_local = ganancia
@@ -155,7 +159,7 @@ class QNodesMPI(SIA, nombre="qn_mpi"):
 
         return min(
             self.memoria_grupo_candidato,
-            key=lambda c: self.memoria_grupo_candidato[c][INT_ZERO],
+            key=lambda c: self.memoria_grupo_candidato[c],
         )
 
     # ── Evaluación de batches de cortes ────────────────────────────────────
@@ -174,17 +178,11 @@ class QNodesMPI(SIA, nombre="qn_mpi"):
 
         if len(pendientes) < MIN_BATCH_PARALELO:
             for corte in pendientes:
-                _, emd, dist = self.__eval_cut_inline(corte)
-                self.memoria_bipart[corte] = (emd, dist)
+                alcance, mecanismo = corte
+                self.memoria_bipart[corte] = f_cara(self._oraculo, alcance, mecanismo)
         else:
-            for corte, emd, dist in self._executor.map(_eval_cut, pendientes):
-                self.memoria_bipart[corte] = (emd, dist)
-
-    def __eval_cut_inline(self, corte: Corte):
-        alcance, mecanismo = corte
-        dist = self.sistema.bipartir(alcance, mecanismo).distribucion_marginal()
-        emd = float(emd_efecto(dist, self.distribucion))
-        return corte, emd, dist
+            for corte, emd in self._executor.map(_eval_cut, pendientes):
+                self.memoria_bipart[corte] = emd
 
     def _registrar_batch(self, grupos: list) -> None:
         """Registra cada grupo como partición candidata (corte que lo aísla)."""

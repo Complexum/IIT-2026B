@@ -105,20 +105,33 @@ def guardar_meta_completo(
     try:
         df = (
             pl.read_csv(output_path, infer_schema_length=0)
-            .select(["perdida", "tiempo", "plataforma"])
+            .select(["perdida", "tiempo_wall_s", "tiempo_cpu_s", "cpu_user_s", "cpu_sys_s", "mem_rss_mb", "gpu_mem_mb", "plataforma"])
             .with_columns(
                 pl.col("perdida").cast(pl.Float64),
-                pl.col("tiempo").cast(pl.Float64),
+                pl.col("tiempo_wall_s").cast(pl.Float64),
+                pl.col("tiempo_cpu_s").cast(pl.Float64),
+                pl.col("cpu_user_s").cast(pl.Float64),
+                pl.col("cpu_sys_s").cast(pl.Float64),
+                pl.col("mem_rss_mb").cast(pl.Float64),
+                pl.col("gpu_mem_mb").cast(pl.Float64),
             )
         )
-        numeric = df.select(["perdida", "tiempo"]).drop_nulls()
+        numeric = df.select(["perdida", "tiempo_wall_s", "tiempo_cpu_s", "cpu_user_s", "cpu_sys_s", "mem_rss_mb", "gpu_mem_mb"]).drop_nulls()
         n_comp = len(numeric)
         data["n_completados"] = n_comp
         if n_comp > 0:
-            data["tiempo_total_s"] = round(float(numeric["tiempo"].sum()), 4)
-            data["tiempo_medio_s"] = round(float(numeric["tiempo"].mean()), 4)
-            data["tiempo_min_s"] = round(float(numeric["tiempo"].min()), 4)
-            data["tiempo_max_s"] = round(float(numeric["tiempo"].max()), 4)
+            data["tiempo_wall_total_s"] = round(float(numeric["tiempo_wall_s"].sum()), 4)
+            data["tiempo_wall_medio_s"] = round(float(numeric["tiempo_wall_s"].mean()), 4)
+            data["tiempo_wall_min_s"] = round(float(numeric["tiempo_wall_s"].min()), 4)
+            data["tiempo_wall_max_s"] = round(float(numeric["tiempo_wall_s"].max()), 4)
+            data["tiempo_cpu_total_s"] = round(float(numeric["tiempo_cpu_s"].sum()), 4)
+            data["tiempo_cpu_medio_s"] = round(float(numeric["tiempo_cpu_s"].mean()), 4)
+            data["tiempo_cpu_min_s"] = round(float(numeric["tiempo_cpu_s"].min()), 4)
+            data["tiempo_cpu_max_s"] = round(float(numeric["tiempo_cpu_s"].max()), 4)
+            data["cpu_user_total_s"] = round(float(numeric["cpu_user_s"].sum()), 4)
+            data["cpu_sys_total_s"] = round(float(numeric["cpu_sys_s"].sum()), 4)
+            data["mem_rss_max_mb"] = round(float(numeric["mem_rss_mb"].max()), 3)
+            data["gpu_mem_max_mb"] = round(float(numeric["gpu_mem_mb"].max()), 3)
             data["perdida_media"] = round(float(numeric["perdida"].mean()), 6)
             data["perdida_min"] = round(float(numeric["perdida"].min()), 6)
             data["perdida_max"] = round(float(numeric["perdida"].max()), 6)

@@ -7,6 +7,7 @@ from pathlib import Path
 from src.cli.utils import console, error, info, success, warn
 from src.iit.core.params import Params
 from src.iit.strategies.runner import ejecutar
+from src.infra.monitoring.resource_monitor import ResourceMonitor
 from src.io.manager import cargar_mpt
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
@@ -119,9 +120,10 @@ def handle(args) -> None:
 
                 try:
                     params = Params(estado, condicion, alcance, mecanismo)
-                    t0 = time.time()
+                    monitor = ResourceMonitor()
+                    monitor.start()
                     sol = ejecutar(tpm, params, prog.estrategia)
-                    elapsed_s = round(time.time() - t0, 4)
+                    stats = monitor.stop()
                     writer.writerow(
                         [
                             i,
@@ -130,7 +132,12 @@ def handle(args) -> None:
                             alcance,
                             mecanismo,
                             round(float(sol.perdida), 6),
-                            elapsed_s,
+                            stats.tiempo_wall_s,
+                            stats.tiempo_cpu_s,
+                            stats.cpu_user_s,
+                            stats.cpu_sys_s,
+                            stats.mem_rss_mb,
+                            stats.gpu_mem_mb,
                             sol.particion.replace("\n", "\\n"),
                             plataforma,
                         ]

@@ -19,6 +19,7 @@ from textual.widgets import Button, Label, Rule
 from src.iit.core.params import Params
 from src.iit.strategies.runner import ejecutar
 from src.infra.middlewares.slogger import get_logger
+from src.infra.monitoring.resource_monitor import ResourceMonitor
 from src.io.manager import cargar_mpt, dims_de_red
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
@@ -226,9 +227,10 @@ class ExecutionScreen(Widget):
                     )
                     try:
                         params = Params(estado, condicion, alcance, mecanismo)
-                        t0 = time.time()
+                        monitor = ResourceMonitor()
+                        monitor.start()
                         sol = ejecutar(tpm, params, prog.estrategia)
-                        elapsed_s = round(time.time() - t0, 4)
+                        stats = monitor.stop()
                         writer.writerow(
                             [
                                 i,
@@ -237,7 +239,12 @@ class ExecutionScreen(Widget):
                                 alcance,
                                 mecanismo,
                                 round(float(sol.perdida), 6),
-                                elapsed_s,
+                                stats.tiempo_wall_s,
+                                stats.tiempo_cpu_s,
+                                stats.cpu_user_s,
+                                stats.cpu_sys_s,
+                                stats.mem_rss_mb,
+                                stats.gpu_mem_mb,
                                 sol.particion.replace("\n", "\\n"),
                                 plataforma,
                             ]

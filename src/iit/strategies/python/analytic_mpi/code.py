@@ -31,7 +31,7 @@ from src.iit.strategies.python.fmt import fmt_parts
 
 MIN_PARALLEL_MASKS = 64  # D≥8 → overhead de red amortizado
 
-# ── Estado del worker (poblado por el initializer del executor) ────────────
+# ── Estado del worker (poblado por el initializer del executor) ──────────── #
 _W_SUMAS: np.ndarray | None = None
 _W_FULL: int = 0
 _W_D: int = 0

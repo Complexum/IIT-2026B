@@ -46,11 +46,11 @@ def load_group_df(
         try:
             df = (
                 pl.read_csv(path, infer_schema_length=0)
-                .select(["indice", "alcance", "mecanismo", "perdida", "tiempo"])
+                .select(["indice", "alcance", "mecanismo", "perdida", "tiempo_wall_s"])
                 .with_columns(
                     pl.col("indice").cast(pl.Int64),
                     pl.col("perdida").cast(pl.Float64),
-                    pl.col("tiempo").cast(pl.Float64),
+                    pl.col("tiempo_wall_s").cast(pl.Float64),
                 )
             )
         except Exception:
@@ -58,7 +58,7 @@ def load_group_df(
         if df.is_empty():
             continue
 
-        df = df.rename({"perdida": estrategia, "tiempo": f"{estrategia}_t"})
+        df = df.rename({"perdida": estrategia, "tiempo_wall_s": f"{estrategia}_t"})
 
         if base is None:
             base = df.select(["indice", "alcance", "mecanismo"]).with_columns(

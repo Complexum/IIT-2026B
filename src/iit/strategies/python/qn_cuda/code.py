@@ -1,21 +1,21 @@
-"""Estrategia QNodes-CUDA: algoritmo Q sobre EMD real, biparticiones batched en GPU (cupy).
+"""Estrategia QNodes-CUDA: algoritmo Q con oráculo Zeta, biparticiones batched en GPU (cupy).
 
-Mismo algoritmo Q que ``qn`` (singletons + pares colgantes), pero la matemática de la
-bipartición se reimplementa **vectorizada en GPU**. El driver sigue secuencial; cada
-**batch de cortes independientes** se evalúa de una sola pasada en la GPU.
+Mismo algoritmo Q que ``qn`` (singletons + pares colgantes), incluyendo el **mismo
+oráculo Zeta** (``qn.oracle.preparar_oraculo`` / ``sumas[i, m] = Σ`` sobre δ = H − p) para
+rankear candidatos durante el MAO. El precompute corre en CPU (idéntico a ``qn``,
+``qn_mul`` y ``qn_mpi``); ``sumas`` se sube una vez a GPU y cada **batch de cortes
+independientes** se evalúa de una sola pasada vectorizada.
 
 Reducción exacta del corte
 --------------------------
-Para todo cubo i, ``data_nd[i]`` tiene forma ``(2,)*D`` (eje d = ``sistema.dims[d]``).
-El precompute *Zeta transform* (``hyperfaces``) da ``sumas[i, m] = Σ`` sobre las celdas con
-los ejes de la máscara ``m`` libres y el resto fijo en el pivote → media =
-``sumas[i,m] / 2^popcount(m)``.
+``f_cara(alcance, mecanismo) = Σ_i |val_b_i|`` si ``i ∈ alcance`` (media de
+``sumas[i, ~m]``, complemento de ``mecanismo``) o ``Σ_i |val_a_i|`` si ``i ∉ alcance``
+(media de ``sumas[i, m]``) — misma fórmula que ``qn.oracle.f_cara``, evaluada en lote
+con ``cp.where``.
 
-``sistema.bipartir(alcance, mecanismo).distribucion_marginal()[i]`` equivale a:
-  - i ∈ alcance → media con ejes libres = complemento de ``mecanismo`` (``~m``);
-  - i ∉ alcance → media con ejes libres = ``mecanismo`` (``m``).
-Y ``dm_original[i]`` = valor en el pivote = ``pivot_vals[i]``. Por tanto
-``loss(corte) = Σ_i |dm[i] − pivot_vals[i]|`` — idéntico a ``qn`` (validar en cluster).
+Al final, igual que ``qn``, se recalcula ``(distribucion_particion, perdida)`` del MIP
+ganador con ``System.bipartir + distribucion_marginal + emd_efecto`` reales (CPU,
+costo O(N·2^D) una sola vez).
 
 Hard-fail: sin ``cupy``/GPU, ``resolver`` lanza ``RuntimeError`` (la estrategia sigue
 registrada y visible en CLI). Instalación cluster: ``uv pip install -e ".[cuda]"``.
@@ -26,9 +26,10 @@ import time
 import numpy as np
 
 from src.iit.base.consts import ACTUAL, EFFECT, FLOAT_ZERO, INFTY_POS, INT_ZERO
+from src.iit.base.funcs import emd_efecto
 from src.iit.core.solution import Solution
-from src.iit.strategies.python.analytic.code import hyperfaces
 from src.iit.strategies.python.fmt import fmt_parts
+from src.iit.strategies.python.qn.oracle import preparar_oraculo
 from src.iit.strategies.python.sia import SIA
 
 Vertice = tuple[int, int]
@@ -74,41 +75,35 @@ class QNodesCUDA(SIA, nombre="qn_cuda"):
                 f"qn_cuda: D={D} excede D_MAX_CUDA={D_MAX_CUDA} (memoria GPU)."
             )
 
-        # ── Precompute en GPU (una vez) ──────────────────────────────────────
+        # ── Precompute Zeta en CPU (idéntico a qn), sumas subidas a GPU ──────
+        oraculo = preparar_oraculo(self.sistema)
         self._cp = cp
-        self._D = D
-        self._full = (1 << D) - 1
-        self._dims = dims
-        # posición de cada nodo i según si su índice está en el alcance del corte
-        self._indices_arr = np.array(indices, dtype=np.int64)
-
-        N = len(self.sistema.ncubos)
-        data_nd = np.stack([c.ndata for c in self.sistema.ncubos])
-        pivot_idx = tuple(int(self.sistema.estado_inicial[dim]) for dim in dims)
-        pivot_vals = data_nd[(slice(None),) + pivot_idx].astype(np.float32)  # (N,)
-
-        sumas = hyperfaces(N, D, data_nd, pivot_idx)  # (N, 2^D) float32
-        self._sumas_g = cp.asarray(sumas)
-        self._pivot_g = cp.asarray(pivot_vals)
+        self._D = oraculo.D
+        self._full = oraculo.full_mask
+        self._pos_dim = oraculo.pos_dim
+        self._indices_order = oraculo.indices_order
+        self._sumas_g = cp.asarray(oraculo.sumas)
         self._pop = cp.asarray(
             np.array([bin(m).count("1") for m in range(1 << D)], dtype=np.float32)
         )
 
-        self.memoria_bipart: dict[Corte, tuple] = {}
-        self.memoria_grupo_candidato: dict[Corte, tuple] = {}
+        self.memoria_bipart: dict[Corte, float] = {}
+        self.memoria_grupo_candidato: dict[Corte, float] = {}
 
         futuro = tuple((EFFECT, idx) for idx in indices)
         presente = tuple((ACTUAL, dim) for dim in dims)
         vertices = list(presente + futuro)
         mip = self.algorithm(vertices)
 
-        perdida_mip, dist_mip = self.memoria_grupo_candidato[mip]
+        # Reconstrucción exacta del MIP ganador: una marginalización real + EMD real.
         alcance, mecanismo = mip
+        dist_mip = self.sistema.bipartir(alcance, mecanismo).distribucion_marginal()
+        perdida_mip = float(emd_efecto(dist_mip, dm_original))
         texto = fmt_parts((alcance, mecanismo), (indices, dims))
 
         return Solution(
             estrategia=self.nombre.capitalize(),
-            perdida=float(perdida_mip),
+            perdida=perdida_mip,
             distribucion_subsistema=dm_original,
             distribucion_particion=dist_mip,
             particion=texto.strip(),
@@ -134,10 +129,10 @@ class QNodesCUDA(SIA, nombre="qn_cuda"):
                 emd_local = INFTY_POS
                 indice_mip = INT_ZERO
                 for k, dk in enumerate(deltas_ciclo):
-                    emd_delta = self.memoria_bipart[self.__cut_key([dk])][INT_ZERO]
+                    emd_delta = self.memoria_bipart[self.__cut_key([dk])]
                     emd_union = self.memoria_bipart[
                         self.__cut_key([dk, *omegas_ciclo])
-                    ][INT_ZERO]
+                    ]
                     ganancia = emd_union - emd_delta
                     if ganancia < emd_local:
                         emd_local = ganancia
@@ -155,10 +150,10 @@ class QNodesCUDA(SIA, nombre="qn_cuda"):
 
         return min(
             self.memoria_grupo_candidato,
-            key=lambda c: self.memoria_grupo_candidato[c][INT_ZERO],
+            key=lambda c: self.memoria_grupo_candidato[c],
         )
 
-    # ── Evaluación batched en GPU ──────────────────────────────────────────
+    # ── Evaluación batched en GPU (oráculo Zeta, igual a qn.oracle.f_cara) ──
     def _eval_cuts(self, grupos: list) -> None:
         cp = self._cp
         pendientes: list[Corte] = []
@@ -175,35 +170,30 @@ class QNodesCUDA(SIA, nombre="qn_cuda"):
         full = self._full
         masks = np.empty(B, dtype=np.int64)
         comps = np.empty(B, dtype=np.int64)
-        alc_bool = np.zeros((len(self._indices_arr), B), dtype=bool)
+        alc_bool = np.zeros((len(self._indices_order), B), dtype=bool)
         for b, (alcance, mecanismo) in enumerate(pendientes):
             m = 0
-            for d, dim in enumerate(self._dims):
-                if dim in mecanismo:
-                    m |= 1 << d
+            for d in mecanismo:
+                m |= 1 << self._pos_dim[d]
             masks[b] = m
             comps[b] = full ^ m
             if alcance:
                 alc_set = set(alcance)
-                alc_bool[:, b] = np.isin(self._indices_arr, list(alc_set))
+                alc_bool[:, b] = np.isin(self._indices_order, list(alc_set))
 
         masks_g = cp.asarray(masks)
         comps_g = cp.asarray(comps)
         alc_g = cp.asarray(alc_bool)
 
-        # media con ejes libres = m (no-alcance) y = ~m (alcance)
-        col_m = self._sumas_g[:, masks_g] / cp.exp2(self._pop[masks_g])[None, :]
-        col_c = self._sumas_g[:, comps_g] / cp.exp2(self._pop[comps_g])[None, :]
-        dm = cp.where(alc_g, col_c, col_m)  # (N, B)
-        loss = cp.abs(dm - self._pivot_g[:, None]).sum(axis=0)  # (B,)
+        # |mean_mec(δ)| (val_a) y |mean_compl(δ)| (val_b) — igual a qn.oracle.f_cara
+        val_a = cp.abs(self._sumas_g[:, masks_g]) / cp.exp2(self._pop[masks_g])[None, :]
+        val_b = cp.abs(self._sumas_g[:, comps_g]) / cp.exp2(self._pop[comps_g])[None, :]
+        cost = cp.where(alc_g, val_b, val_a)  # (N, B)
+        loss = cost.sum(axis=0)  # (B,)
 
         loss_h = cp.asnumpy(loss)
-        dm_h = cp.asnumpy(dm)
         for b, corte in enumerate(pendientes):
-            self.memoria_bipart[corte] = (
-                float(loss_h[b]),
-                dm_h[:, b].astype(np.float32),
-            )
+            self.memoria_bipart[corte] = float(loss_h[b])
 
     def _registrar_batch(self, grupos: list) -> None:
         self._eval_cuts(grupos)

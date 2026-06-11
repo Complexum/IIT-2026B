@@ -10,7 +10,12 @@ CSV_HEADERS = [
     "alcance",
     "mecanismo",
     "perdida",
-    "tiempo",
+    "tiempo_wall_s",
+    "tiempo_cpu_s",
+    "cpu_user_s",
+    "cpu_sys_s",
+    "mem_rss_mb",
+    "gpu_mem_mb",
     "particion",
     "plataforma",
 ]

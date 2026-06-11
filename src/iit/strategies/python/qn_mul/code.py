@@ -1,13 +1,15 @@
-"""Estrategia QNodes-MUL: algoritmo Q sobre EMD real, paralelizado con multiprocessing.
+"""Estrategia QNodes-MUL: algoritmo Q con oráculo Zeta, paralelizado con multiprocessing.
 
-Mismo algoritmo Q que ``qn`` (singletons + pares colgantes, EMD real exacta), pero la
-evaluación de cada **batch de cortes independientes** (pre-pass de singletons y los
-``loss(delta ∪ omega)`` de cada paso MAO) se reparte entre procesos con
-``multiprocessing.Pool``. El driver sigue secuencial (orden MAO + contracciones dependen
-del paso previo); solo el cálculo de biparticiones se paraleliza.
+Mismo algoritmo Q que ``qn`` (singletons + pares colgantes), incluyendo el **mismo
+oráculo Zeta** (``qn.oracle.preparar_oraculo`` / ``f_cara``) para rankear candidatos
+durante el MAO — bit-idéntico a ``qn``. La evaluación de cada **batch de cortes
+independientes** (pre-pass de singletons y los ``f_cara(delta ∪ omega)`` de cada paso
+MAO) se reparte entre procesos con ``multiprocessing.Pool``. El driver sigue secuencial
+(orden MAO + contracciones dependen del paso previo); solo el cálculo de
+``f_cara`` se paraleliza.
 
-Cada worker reutiliza ``System.bipartir + distribucion_marginal + emd_efecto`` verbatim →
-resultado **idéntico** a ``qn``.
+Al final, igual que ``qn``, se recalcula ``(distribucion_particion, perdida)`` del MIP
+ganador con ``System.bipartir + distribucion_marginal + emd_efecto`` reales.
 """
 
 import multiprocessing as mp
@@ -19,8 +21,8 @@ from src.iit.base.app import aplicacion
 from src.iit.base.consts import ACTUAL, EFFECT, FLOAT_ZERO, INFTY_POS, INT_ZERO
 from src.iit.base.funcs import emd_efecto
 from src.iit.core.solution import Solution
-from src.iit.core.system import System
 from src.iit.strategies.python.fmt import fmt_parts
+from src.iit.strategies.python.qn.oracle import Oraculo, f_cara, preparar_oraculo
 from src.iit.strategies.python.sia import SIA
 
 Vertice = tuple[int, int]
@@ -30,22 +32,19 @@ Corte = tuple[tuple[int, ...], tuple[int, ...]]  # (alcance, mecanismo)
 MIN_BATCH_PARALELO = 16
 
 # ── Estado del worker (poblado por el initializer del Pool) ────────────────
-_W_SYS: System | None = None
-_W_DM = None
+_W_ORACULO: Oraculo | None = None
 
 
-def _init_worker(sistema: System, dm_original) -> None:
-    global _W_SYS, _W_DM
-    _W_SYS = sistema
-    _W_DM = dm_original
+def _init_worker(oraculo: Oraculo) -> None:
+    global _W_ORACULO
+    _W_ORACULO = oraculo
 
 
 def _eval_cut(corte: Corte):
-    """Worker: EMD real del corte (alcance, mecanismo)."""
+    """Worker: EMD del corte (alcance, mecanismo) vía oráculo Zeta."""
     alcance, mecanismo = corte
-    dist = _W_SYS.bipartir(alcance, mecanismo).distribucion_marginal()
-    emd = float(emd_efecto(dist, _W_DM))
-    return corte, emd, dist
+    emd = f_cara(_W_ORACULO, alcance, mecanismo)
+    return corte, emd
 
 
 class QNodesMUL(SIA, nombre="qn_mul"):
@@ -69,11 +68,14 @@ class QNodesMUL(SIA, nombre="qn_mul"):
                 quiere_hablar=False,
             )
 
+        # Precómputo Zeta: todas las sumas de cara en O(D·N·2^D), una sola vez.
+        self._oraculo = preparar_oraculo(self.sistema)
+
         futuro = tuple((EFFECT, idx) for idx in indices)
         presente = tuple((ACTUAL, dim) for dim in dims)
 
-        self.memoria_bipart: dict[Corte, tuple] = {}
-        self.memoria_grupo_candidato: dict[Corte, tuple] = {}
+        self.memoria_bipart: dict[Corte, float] = {}
+        self.memoria_grupo_candidato: dict[Corte, float] = {}
 
         n_workers = max(1, os.cpu_count() or 1)
         vertices = list(presente + futuro)
@@ -87,18 +89,20 @@ class QNodesMUL(SIA, nombre="qn_mul"):
             with ctx.Pool(
                 processes=n_workers,
                 initializer=_init_worker,
-                initargs=(self.sistema, dm_original),
+                initargs=(self._oraculo,),
             ) as pool:
                 self._pool = pool
                 mip = self.algorithm(vertices)
 
-        perdida_mip, dist_mip = self.memoria_grupo_candidato[mip]
+        # Reconstrucción exacta del MIP ganador: una marginalización real + EMD real.
         alcance, mecanismo = mip
+        dist_mip = self.sistema.bipartir(alcance, mecanismo).distribucion_marginal()
+        perdida_mip = float(emd_efecto(dist_mip, dm_original))
         texto = fmt_parts((alcance, mecanismo), (indices, dims))
 
         return Solution(
             estrategia=self.nombre.capitalize(),
-            perdida=float(perdida_mip),
+            perdida=perdida_mip,
             distribucion_subsistema=dm_original,
             distribucion_particion=dist_mip,
             particion=texto.strip(),
@@ -126,10 +130,10 @@ class QNodesMUL(SIA, nombre="qn_mul"):
                 emd_local = INFTY_POS
                 indice_mip = INT_ZERO
                 for k, dk in enumerate(deltas_ciclo):
-                    emd_delta = self.memoria_bipart[self.__cut_key([dk])][INT_ZERO]
+                    emd_delta = self.memoria_bipart[self.__cut_key([dk])]
                     emd_union = self.memoria_bipart[
                         self.__cut_key([dk, *omegas_ciclo])
-                    ][INT_ZERO]
+                    ]
                     ganancia = emd_union - emd_delta
                     if ganancia < emd_local:
                         emd_local = ganancia
@@ -147,7 +151,7 @@ class QNodesMUL(SIA, nombre="qn_mul"):
 
         return min(
             self.memoria_grupo_candidato,
-            key=lambda c: self.memoria_grupo_candidato[c][INT_ZERO],
+            key=lambda c: self.memoria_grupo_candidato[c],
         )
 
     # ── Evaluación de batches de cortes ────────────────────────────────────
@@ -166,17 +170,11 @@ class QNodesMUL(SIA, nombre="qn_mul"):
 
         if self._pool is None or len(pendientes) < MIN_BATCH_PARALELO:
             for corte in pendientes:
-                _, emd, dist = self.__eval_cut_inline(corte)
-                self.memoria_bipart[corte] = (emd, dist)
+                alcance, mecanismo = corte
+                self.memoria_bipart[corte] = f_cara(self._oraculo, alcance, mecanismo)
         else:
-            for corte, emd, dist in self._pool.map(_eval_cut, pendientes):
-                self.memoria_bipart[corte] = (emd, dist)
-
-    def __eval_cut_inline(self, corte: Corte):
-        alcance, mecanismo = corte
-        dist = self.sistema.bipartir(alcance, mecanismo).distribucion_marginal()
-        emd = float(emd_efecto(dist, self.distribucion))
-        return corte, emd, dist
+            for corte, emd in self._pool.map(_eval_cut, pendientes):
+                self.memoria_bipart[corte] = emd
 
     def _registrar_batch(self, grupos: list) -> None:
         """Registra cada grupo como partición candidata (corte que lo aísla)."""

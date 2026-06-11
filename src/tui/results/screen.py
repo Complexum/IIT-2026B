@@ -172,7 +172,7 @@ class ResultsScreen(Widget):
                 for h, v in zip(encabezados, valores):
                     if h == "particion":
                         fila.append(v.replace("\\n", "\n"))
-                    elif h == "tiempo":
+                    elif h == "tiempo_wall_s":
                         try:
                             fila.append(f"{float(v):.4f}s")
                         except ValueError:
