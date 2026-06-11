@@ -219,7 +219,14 @@ class DatasetScreen(Widget):
             if dims < 1:
                 raise ValueError
             gb = peso_estimado(dims)
-            lbl.update(f"~{gb * 1024:.2f} MB" if gb < 0.001 else f"~{gb:.3f} GB")
+            if gb >= 1024:
+                lbl.update(f"~{gb / 1024:.2f} TB")
+            elif gb >= 1:
+                lbl.update(f"~{gb:.3f} GB")
+            elif gb >= 0.001:
+                lbl.update(f"~{gb * 1024:.2f} MB")
+            else:
+                lbl.update(f"~{gb * 1024 * 1024:.2f} KB")
         except (ValueError, TypeError):
             lbl.update("~0 GB")
 
