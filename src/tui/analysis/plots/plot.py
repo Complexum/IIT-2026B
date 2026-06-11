@@ -7,6 +7,7 @@ Los gráficos viven en submódulos:
 - boxplot.py     → distribución de tiempos por estrategia
 - waterfall.py   → Δt vs baseline (waterfall)
 - correlation.py → correlación Φ_strat vs Φ_ref
+- resource.py    → uso de recursos por índice (cpu_user_s, cpu_sys_s, mem_rss_mb, gpu_mem_mb)
 - common.py      → helpers compartidos + open_plot
 """
 

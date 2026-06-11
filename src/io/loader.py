@@ -33,11 +33,20 @@ def group_selected(names: list[str]) -> dict[tuple[str, str], dict[str, str]]:
 def load_group_df(
     group: dict[str, str],
     output_dir: Path = RESULTADOS_DIR,
+    include_resources: bool = False,
 ) -> pl.DataFrame:
     """Carga y fusiona CSVs de un grupo (mismo dataset+patron) en un DataFrame.
 
     Columnas resultantes: indice, alcance, mecanismo, subsys, {strat}, {strat}_t, ...
+
+    Args:
+        group: dict de {estrategia: nombre_completo}
+        output_dir: directorio de resultados
+        include_resources: si True, incluye columnas de recursos (cpu_user_s, etc.)
     """
+    resource_cols = ["cpu_user_s", "cpu_sys_s", "mem_rss_mb", "gpu_mem_mb"] if include_resources else []
+    base_cols = ["indice", "alcance", "mecanismo", "perdida", "tiempo_wall_s"] + resource_cols
+
     dfs: list[pl.DataFrame] = []
     base: pl.DataFrame | None = None
 
@@ -46,11 +55,16 @@ def load_group_df(
         try:
             df = (
                 pl.read_csv(path, infer_schema_length=0)
-                .select(["indice", "alcance", "mecanismo", "perdida", "tiempo_wall_s"])
+                .select(base_cols)
                 .with_columns(
                     pl.col("indice").cast(pl.Int64),
                     pl.col("perdida").cast(pl.Float64),
                     pl.col("tiempo_wall_s").cast(pl.Float64),
+                    *(
+                        [pl.col(c).cast(pl.Float64) for c in resource_cols]
+                        if resource_cols
+                        else []
+                    ),
                 )
             )
         except Exception:
@@ -59,6 +73,8 @@ def load_group_df(
             continue
 
         df = df.rename({"perdida": estrategia, "tiempo_wall_s": f"{estrategia}_t"})
+        for c in resource_cols:
+            df = df.rename({c: f"{estrategia}_{c}"})
 
         if base is None:
             base = df.select(["indice", "alcance", "mecanismo"]).with_columns(
@@ -80,12 +96,19 @@ def load_group_df(
 def load_all_groups(
     names: list[str],
     output_dir: Path = RESULTADOS_DIR,
+    include_resources: bool = False,
 ) -> dict[tuple[str, str], pl.DataFrame]:
-    """Carga todos los grupos a partir de los nombres seleccionados en la TUI."""
+    """Carga todos los grupos a partir de los nombres seleccionados en la TUI.
+
+    Args:
+        names: lista de nombres completos de resultados
+        output_dir: directorio de resultados
+        include_resources: si True, incluye columnas de recursos
+    """
     groups = group_selected(names)
     result = {}
     for key, strat_map in groups.items():
-        df = load_group_df(strat_map, output_dir)
+        df = load_group_df(strat_map, output_dir, include_resources=include_resources)
         if not df.is_empty():
             result[key] = df
     return result

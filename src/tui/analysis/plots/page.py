@@ -1,17 +1,28 @@
-"""Página HTML multi-sección: tiempos, box-plots, correlación y error relativo."""
+"""Página HTML multi-sección: tiempos, box-plots, correlación, error relativo y recursos."""
 
 from pathlib import Path
 
 from src.tui.analysis.plots.boxplot import _build_box_fig
 from src.tui.analysis.plots.common import (
     RESULTADOS_DIR,
+    RESOURCE_METRICS,
     _grid_shape,
     _pick_ref,
     _strats,
 )
 from src.tui.analysis.plots.correlation import _build_corr_fig
+from src.tui.analysis.plots.resource import _build_resource_fig
 from src.tui.analysis.plots.time import _build_time_fig
 from src.tui.analysis.plots.waterfall import _build_waterfall_fig
+
+
+_RESOURCE_HTML_TEMPLATE = """\
+<div class="section" id="{section_id}">
+  <h2>{title}</h2>
+  <p class="meta">Una línea por estrategia · línea punteada = promedio</p>
+  {content}
+</div>
+"""
 
 
 _HTML_TEMPLATE = """\
@@ -27,6 +38,7 @@ _HTML_TEMPLATE = """\
     position: sticky; top: 0; z-index: 100;
     background: #16213e; border-bottom: 1px solid #0f3460;
     padding: 10px 24px; display: flex; gap: 24px; align-items: center;
+    flex-wrap: wrap;
   }}
   nav span {{ color: #64b5f6; font-weight: 600; font-size: 0.95rem; }}
   nav a {{ color: #90caf9; text-decoration: none; font-size: 0.9rem; }}
@@ -46,6 +58,7 @@ _HTML_TEMPLATE = """\
   <a href="#boxplots">Box-plots</a>
   <a href="#correlacion">Correlación</a>
   <a href="#waterfall">Δt vs {ref}</a>
+  {resource_nav}
 </nav>
 
 <div class="section" id="tiempos">
@@ -72,6 +85,8 @@ _HTML_TEMPLATE = """\
   {waterfall_html}
 </div>
 
+{resource_sections}
+
 </body>
 </html>
 """
@@ -82,15 +97,14 @@ def generate_analysis_page(
     reference: str | None = None,
     tol: float = 1e-4,
 ) -> Path:
-    """Genera HTML multi-sección: tiempos, box-plots, error relativo, correlación."""
+    """Genera HTML multi-sección: tiempos, box-plots, error relativo, correlación y recursos."""
     from src.io.loader import load_all_groups
 
     all_names = [n for names in groups.values() for n in names]
-    groups_data = load_all_groups(all_names)
+    groups_data = load_all_groups(all_names, include_resources=True)
     if not groups_data:
         raise ValueError("Sin datos para graficar")
 
-    # Determinar referencia real para el título
     first_df = next(iter(groups_data.values()))
     ref_used = _pick_ref(_strats(first_df), reference)
 
@@ -99,20 +113,37 @@ def generate_analysis_page(
 
     time_fig = _build_time_fig(groups_data, rows, cols)
     box_fig = _build_box_fig(groups_data, rows, cols)
-    waterfall_fig = _build_waterfall_fig(groups_data, reference, rows, cols)
+    # waterfall_fig = _build_waterfall_fig(groups_data, reference, rows, cols)
     corr_fig = _build_corr_fig(groups_data, reference, rows, cols, tol)
 
     time_html = time_fig.to_html(full_html=False, include_plotlyjs="cdn")
     box_html = box_fig.to_html(full_html=False, include_plotlyjs=False)
-    waterfall_html = waterfall_fig.to_html(full_html=False, include_plotlyjs=False)
+    # waterfall_html = waterfall_fig.to_html(full_html=False, include_plotlyjs=False)
     corr_html = corr_fig.to_html(full_html=False, include_plotlyjs=False)
+
+    resource_nav_items = ""
+    resource_sections = ""
+    for metric, label in RESOURCE_METRICS:
+        section_id = metric.replace("_", "-")
+        fig = _build_resource_fig(groups_data, rows, cols, metric, label)
+        content = fig.to_html(full_html=False, include_plotlyjs=False)
+        resource_sections += _RESOURCE_HTML_TEMPLATE.format(
+            section_id=section_id,
+            title=label,
+            content=content,
+        )
+        resource_nav_items += (
+            f'\n  <a href="#{section_id}">{label.split("(")[0].strip()}</a>'
+        )
 
     html = _HTML_TEMPLATE.format(
         ref=ref_used,
         time_html=time_html,
         box_html=box_html,
-        waterfall_html=waterfall_html,
+        # waterfall_html=waterfall_html,
         corr_html=corr_html,
+        resource_nav=resource_nav_items,
+        resource_sections=resource_sections,
     )
 
     out_path = RESULTADOS_DIR / "compare_plot.html"

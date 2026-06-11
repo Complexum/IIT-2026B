@@ -17,12 +17,21 @@ __all__ = [
     "_subplot_titles",
     "_hover_text",
     "open_plot",
+    "RESOURCE_METRICS",
 ]
 
 
 _COLORS = [
     "#2196F3", "#F44336", "#4CAF50", "#FF9800",
     "#9C27B0", "#00BCD4", "#FFEB3B", "#795548",
+]
+
+
+RESOURCE_METRICS = [
+    ("cpu_user_s", "CPU user (s)"),
+    ("cpu_sys_s", "CPU system (s)"),
+    ("mem_rss_mb", "Memory RSS (MB)"),
+    ("gpu_mem_mb", "GPU memory (MB)"),
 ]
 
 
@@ -42,7 +51,13 @@ def _grid_shape(n: int) -> tuple[int, int]:
 
 def _strats(df: pl.DataFrame) -> list[str]:
     skip = {"indice", "alcance", "mecanismo", "subsys"}
-    return [c for c in df.columns if c not in skip and not c.endswith("_t")]
+    resource_suffixes = {"_cpu_user_s", "_cpu_sys_s", "_mem_rss_mb", "_gpu_mem_mb"}
+    return [
+        c for c in df.columns
+        if c not in skip
+        and not c.endswith("_t")
+        and not any(c.endswith(suf) for suf in resource_suffixes)
+    ]
 
 
 def _pick_ref(strategies: list[str], hint: str | None) -> str:
