@@ -1,0 +1,121 @@
+\babel@toc {spanish}{}\relax 
+\contentsline {chapter}{\numberline {1}Notación asintótica}{7}{chapter.1}%
+\ttl@starttoc {default@1}
+\contentsline {section}{\numberline {1.1}Crecimiento en funciones}{7}{section.1.1}%
+\contentsline {subsubsection}{Funciones no negativas}{7}{section*.2}%
+\contentsline {subsection}{\numberline {1.1.1}Notación Tilde}{7}{subsection.1.1.1}%
+\contentsline {subsection}{\numberline {1.1.2}Big $O$}{7}{subsection.1.1.2}%
+\contentsline {subsection}{\numberline {1.1.3}Big $\Omega $}{8}{subsection.1.1.3}%
+\contentsline {subsection}{\numberline {1.1.4}Big $\Theta $}{8}{subsection.1.1.4}%
+\contentsline {subsubsection}{Propiedades}{8}{section*.3}%
+\contentsline {subsection}{\numberline {1.1.5}Little $o$}{9}{subsection.1.1.5}%
+\contentsline {subsection}{\numberline {1.1.6}Little $\omega $}{9}{subsection.1.1.6}%
+\contentsline {subsection}{\numberline {1.1.7}Propiedades generales}{10}{subsection.1.1.7}%
+\contentsline {subsubsection}{Transitividad}{10}{section*.4}%
+\contentsline {subsubsection}{Reflexividad}{10}{section*.5}%
+\contentsline {subsubsection}{Simetría}{10}{section*.6}%
+\contentsline {subsubsection}{Anti simetría}{10}{section*.7}%
+\contentsline {subsubsection}{Simetría transpuesta}{10}{section*.8}%
+\contentsline {subsection}{\numberline {1.1.8}A dos variables}{11}{subsection.1.1.8}%
+\contentsline {section}{\numberline {1.2}Funciones comúnes}{11}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}Monótomamente incremental}{11}{subsection.1.2.1}%
+\contentsline {subsection}{\numberline {1.2.2}Monótomamente decremental}{12}{subsection.1.2.2}%
+\contentsline {subsection}{\numberline {1.2.3}Estríctamente incremental}{12}{subsection.1.2.3}%
+\contentsline {subsection}{\numberline {1.2.4}Estríctamente decremental}{12}{subsection.1.2.4}%
+\contentsline {subsection}{\numberline {1.2.5}Aritmética modular}{12}{subsection.1.2.5}%
+\contentsline {subsection}{\numberline {1.2.6}Polinomios}{13}{subsection.1.2.6}%
+\contentsline {subsection}{\numberline {1.2.7}Logaritmos}{13}{subsection.1.2.7}%
+\contentsline {subsection}{\numberline {1.2.8}Factoriales}{13}{subsection.1.2.8}%
+\contentsline {subsection}{\numberline {1.2.9}Iteración funcional}{14}{subsection.1.2.9}%
+\contentsline {subsection}{\numberline {1.2.10}Logaritmo estrella}{14}{subsection.1.2.10}%
+\contentsline {chapter}{\numberline {2}Análisis algorítmico}{15}{chapter.2}%
+\ttl@stoptoc {default@1}
+\ttl@starttoc {default@2}
+\contentsline {section}{\numberline {2.1}Introducción}{15}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Sequential Search}{16}{subsection.2.1.1}%
+\contentsline {section}{\numberline {2.2}Probabilidad}{17}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Eventos deterministas}{17}{subsection.2.2.1}%
+\contentsline {subsubsection}{Probabilidad condicional}{17}{section*.9}%
+\contentsline {section}{\numberline {2.3}Principio de correctitud}{17}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Insertion Sort}{18}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}Correctitud}{18}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}Función de eficiencia}{18}{subsection.2.3.3}%
+\contentsline {section}{\numberline {2.4}Limites}{19}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Series}{20}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}Propiedades}{20}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}Series comúnes}{20}{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {2.5.3}Productorias}{22}{subsection.2.5.3}%
+\contentsline {subsubsection}{Propiedades telescópicas}{22}{section*.10}%
+\contentsline {subsubsection}{Correlación}{22}{section*.11}%
+\contentsline {subsection}{\numberline {2.5.4}Límites}{23}{subsection.2.5.4}%
+\contentsline {subsection}{\numberline {2.5.5}Criterios de convergencia}{23}{subsection.2.5.5}%
+\contentsline {subsubsection}{Criterio suficiente de divergencia}{23}{section*.12}%
+\contentsline {chapter}{\numberline {3}Divide y vencerás}{25}{chapter.3}%
+\ttl@stoptoc {default@2}
+\ttl@starttoc {default@3}
+\contentsline {section}{\numberline {3.1}Ordenamiento}{25}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Merge Sort}{25}{subsection.3.1.1}%
+\contentsline {paragraph}{Análisis de eficiencia}{26}{section*.13}%
+\contentsline {subsection}{\numberline {3.1.2}Quick sort}{26}{subsection.3.1.2}%
+\contentsline {subsection}{\numberline {3.1.3}Heaps}{28}{subsection.3.1.3}%
+\contentsline {subsubsection}{Min Heap}{28}{section*.14}%
+\contentsline {subsubsection}{Max Heap}{29}{section*.15}%
+\contentsline {subsection}{\numberline {3.1.4}Heap Sort}{31}{subsection.3.1.4}%
+\contentsline {subsection}{\numberline {3.1.5}Priority Queues}{31}{subsection.3.1.5}%
+\contentsline {chapter}{\numberline {4}Algoritmos voraces}{33}{chapter.4}%
+\ttl@stoptoc {default@3}
+\ttl@starttoc {default@4}
+\contentsline {section}{\numberline {4.1}Introducción}{33}{section.4.1}%
+\contentsline {paragraph}{Planteamiento:}{34}{section*.16}%
+\contentsline {paragraph}{Planteamiento:}{34}{section*.17}%
+\contentsline {chapter}{\numberline {5}Backtracking}{35}{chapter.5}%
+\ttl@stoptoc {default@4}
+\ttl@starttoc {default@5}
+\contentsline {subsection}{\numberline {5.0.1}Las 08 reinas}{36}{subsection.5.0.1}%
+\contentsline {subsection}{\numberline {5.0.2}Las N reinas}{36}{subsection.5.0.2}%
+\contentsline {subsection}{\numberline {5.0.3}Suma de subconjuntos}{36}{subsection.5.0.3}%
+\contentsline {subsection}{\numberline {5.0.4}El viajero comerciante}{36}{subsection.5.0.4}%
+\contentsline {subsection}{\numberline {5.0.5}Coloreo de un grafo $(m-colorability)$}{36}{subsection.5.0.5}%
+\contentsline {subsection}{\numberline {5.0.6}Laberintos}{36}{subsection.5.0.6}%
+\contentsline {paragraph}{Backtracking:}{37}{section*.18}%
+\contentsline {paragraph}{Branch\&Bound:}{37}{section*.19}%
+\contentsline {subsubsection}{Backtracking:}{37}{section*.20}%
+\contentsline {subsubsection}{Branch\&Bound:}{37}{section*.21}%
+\contentsline {subsubsection}{¿Implementación?}{38}{section*.22}%
+\contentsline {chapter}{\numberline {6}Branch\&Bound}{39}{chapter.6}%
+\ttl@stoptoc {default@5}
+\ttl@starttoc {default@6}
+\contentsline {subsection}{\numberline {6.0.1}Problema de la mochila 0-1}{42}{subsection.6.0.1}%
+\contentsline {subsection}{\numberline {6.0.2}Asignación de tareas}{42}{subsection.6.0.2}%
+\contentsline {chapter}{\numberline {7}Programación dinámica}{43}{chapter.7}%
+\ttl@stoptoc {default@6}
+\ttl@starttoc {default@7}
+\contentsline {section}{\numberline {7.1}Introducción}{43}{section.7.1}%
+\contentsline {subsection}{\numberline {7.1.1}Reglas}{43}{subsection.7.1.1}%
+\contentsline {subsection}{\numberline {7.1.2}Sucesión de fibonacci}{43}{subsection.7.1.2}%
+\contentsline {subsection}{\numberline {7.1.3}Problema del cambio}{44}{subsection.7.1.3}%
+\contentsline {subsubsection}{Ejemplo}{45}{section*.23}%
+\contentsline {subsubsection}{Algoritmo recursivo}{47}{section*.24}%
+\contentsline {subsection}{\numberline {7.1.4}Assembly line scheduling }{48}{subsection.7.1.4}%
+\contentsline {subsection}{\numberline {7.1.5}Subtleties}{48}{subsection.7.1.5}%
+\contentsline {subsection}{\numberline {7.1.6}Optimal matrix chain product}{48}{subsection.7.1.6}%
+\contentsline {subsubsection}{Enfoque bottom-up}{49}{section*.25}%
+\contentsline {subsubsection}{Algoritmo top-down}{49}{section*.26}%
+\contentsline {subsection}{\numberline {7.1.7}Longest common subsequence $LCS$}{49}{subsection.7.1.7}%
+\contentsline {subsection}{\numberline {7.1.8}Optimal binary search trees}{49}{subsection.7.1.8}%
+\contentsline {chapter}{\numberline {8}Algoritmos Heurísticos}{51}{chapter.8}%
+\ttl@stoptoc {default@7}
+\ttl@starttoc {default@8}
+\contentsline {section}{\numberline {8.1}Búsquedas}{51}{section.8.1}%
+\contentsline {subsection}{\numberline {8.1.1}Búsqueda de coste uniforme}{51}{subsection.8.1.1}%
+\contentsline {subsection}{\numberline {8.1.2}Best First Search (Greedy Best First)}{52}{subsection.8.1.2}%
+\contentsline {subsection}{\numberline {8.1.3}A* (A Star)}{53}{subsection.8.1.3}%
+\contentsline {subsection}{\numberline {8.1.4}Búsqueda Óptima}{53}{subsection.8.1.4}%
+\contentsline {subsection}{\numberline {8.1.5}Búsqueda limitada por profundidad}{53}{subsection.8.1.5}%
+\contentsline {section}{\numberline {8.2}Teoría de juegos}{54}{section.8.2}%
+\contentsline {subsection}{\numberline {8.2.1}Algoritmo Min-Max}{54}{subsection.8.2.1}%
+\contentsline {subsection}{\numberline {8.2.2}Algoritmo MINIMAX}{54}{subsection.8.2.2}%
+\contentsline {subsubsection}{Eficiencia}{55}{section*.27}%
+\contentsline {subsection}{\numberline {8.2.3}Poda $\alpha -\beta $}{55}{subsection.8.2.3}%
+\contentsline {subsubsection}{Eficiencia}{55}{section*.28}%
+\contentsfinish 
