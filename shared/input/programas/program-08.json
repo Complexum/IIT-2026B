@@ -1,9 +1,11 @@
 {
   "nombre": "program-08",
-  "dataset": "N21B",
+  "dataset": "N22A",
   "patron": "patron-2",
   "estrategia": "phi",
   "estado": "completado",
   "inicio": 0.0,
-  "progreso": 100.0
+  "progreso": 100.0,
+  "n_procs": 4,
+  "exec_template": "mpiexec -n {n_procs} python -m mpi4py.futures -m src.cli run execution {nombre}"
 }

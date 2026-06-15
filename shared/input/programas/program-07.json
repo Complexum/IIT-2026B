@@ -1,9 +1,11 @@
 {
   "nombre": "program-07",
-  "dataset": "N20B",
+  "dataset": "N20A",
   "patron": "patron-2",
-  "estrategia": "qn_mpi",
-  "estado": "ejecutando",
+  "estrategia": "qn",
+  "estado": "completado",
   "inicio": 0.0,
-  "progreso": 100.0
+  "progreso": 100.0,
+  "n_procs": 4,
+  "exec_template": "mpiexec -n {n_procs} python -m mpi4py.futures -m src.cli run execution {nombre}"
 }
