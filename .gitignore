@@ -222,6 +222,7 @@ src/controllers/strategies/qp_nodes.py
 *.html
 **/*.html
 **/.temp/
+temp/
 
 alt.py
 **/alt.py
