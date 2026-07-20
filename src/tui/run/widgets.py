@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Button, Label, ProgressBar, Rule, Select
+from textual.widgets import Button, Checkbox, Label, ProgressBar, Rule, Select
 
 from pathlib import Path
 
@@ -63,9 +63,27 @@ class ProgramCard(Widget):
     def nombre_programa(self) -> str:
         return self.__programa.nombre
 
+    @property
+    def seleccionado(self) -> bool:
+        try:
+            return self.query_one(".card-check", Checkbox).value
+        except Exception:
+            return False
+
+    @property
+    def ejecutando(self) -> bool:
+        return self._ejecutando
+
+    def marcar_seleccionado(self, valor: bool) -> None:
+        try:
+            self.query_one(".card-check", Checkbox).value = valor
+        except Exception:
+            pass
+
     def compose(self) -> ComposeResult:
         p = self.__programa
         with Horizontal(classes="card-header"):
+            yield Checkbox(value=False, classes="card-check")
             yield Label(p.nombre, classes="card-titulo")
             yield Button("✕", variant="error", classes="card-del")
 
@@ -131,6 +149,10 @@ class ProgramCard(Widget):
                 self.post_message(self.Cancelado(self.__programa.nombre))
             else:
                 self.post_message(self.Iniciado(self.__programa.nombre))
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        event.stop()
+        self.set_class(event.value, "selected")
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """Cuando cambia cualquier selector, notificar configuración."""

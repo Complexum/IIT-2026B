@@ -28,6 +28,12 @@ ExecutionScreen {
 
 /* Lista de programas */
 
+#chk-sel-todos {
+    border: none;
+    padding: 0 1;
+    background: transparent;
+}
+
 #exec-lista {
     height: 1fr;
     padding: 1;
@@ -55,9 +61,21 @@ ProgramCard {
     padding: 0 1;
 }
 
+.card-header .card-check {
+    width: auto;
+    min-width: 4;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
 .card-header .card-del {
     width: 5;
     min-width: 5;
+}
+
+ProgramCard.selected {
+    border: solid $accent;
 }
 
 .card-selectores {

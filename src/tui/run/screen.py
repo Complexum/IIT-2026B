@@ -14,7 +14,8 @@ from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Button, Label, Rule
+from textual.widgets import Button, Checkbox, Label, Rule
+from textual.worker import Worker, WorkerFailed
 
 from src.iit.core.params import Params
 from src.iit.strategies.runner import ejecutar
@@ -56,9 +57,12 @@ class ExecutionScreen(Widget):
         # Toolbar
         with Horizontal(id="exec-toolbar"):
             yield Button("+ Nuevo Programa", variant="primary", id="btn-nuevo-prog")
+            yield Button("▶ Ejecutar sel.", variant="success", id="btn-run-all")
             yield Label("Programas de ejecución", classes="toolbar-titulo")
 
         yield Rule()
+
+        yield Checkbox("Seleccionar todos", id="chk-sel-todos")
 
         # Listado scrolleable de tarjetas de programa
         with VerticalScroll(id="exec-lista"):
@@ -67,6 +71,9 @@ class ExecutionScreen(Widget):
     def on_mount(self) -> None:
         self._cancelando: set[str] = set()
         self._mpi_procesos: dict[str, subprocess.Popen] = {}
+        self._batch_activo = False
+        self._batch_cancelado = False
+        self._batch_actual: str | None = None
         self.__refrescar_programas()
 
     # ── Eventos ──
@@ -74,18 +81,21 @@ class ExecutionScreen(Widget):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-nuevo-prog":
             self.__crear_programa()
+        elif event.button.id == "btn-run-all":
+            if self._batch_activo:
+                self.__cancelar_batch()
+            else:
+                self._ejecutar_seleccionados()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        """Checkbox maestro: seleccionar/deseleccionar todas las cards."""
+        if event.checkbox.id == "chk-sel-todos":
+            for card in self.query(ProgramCard):
+                card.marcar_seleccionado(event.value)
 
     def on_program_card_iniciado(self, event: ProgramCard.Iniciado) -> None:
         """Empezar ejecución real de un programa en hilo de fondo."""
-        self.__update_card_ejecutando(event.nombre, True)
-        try:
-            prog = cargar_programa(event.nombre)
-        except Exception:
-            prog = None
-        if prog and es_estrategia_mpi(prog.estrategia):
-            self._ejecutar_programa_mpi(event.nombre)
-        else:
-            self._ejecutar_programa(event.nombre)
+        self.__lanzar_programa(event.nombre)
 
     def on_program_card_cancelado(self, event: ProgramCard.Cancelado) -> None:
         """Señalar al worker que debe detenerse; feedback visual inmediato."""
@@ -112,6 +122,73 @@ class ExecutionScreen(Widget):
             log.error(
                 f"Failed to update program '{event.nombre}': {type(e).__name__}: {e}"
             )
+
+    # ── Ejecución batch ──
+
+    def __lanzar_programa(self, nombre: str) -> Worker:
+        """Marca la card como ejecutando y despacha al worker adecuado (MPI o normal)."""
+        self.__update_card_ejecutando(nombre, True)
+        try:
+            prog = cargar_programa(nombre)
+        except Exception:
+            prog = None
+        if prog and es_estrategia_mpi(prog.estrategia):
+            return self._ejecutar_programa_mpi(nombre)
+        return self._ejecutar_programa(nombre)
+
+    @work(exclusive=True, group="batch-run")
+    async def _ejecutar_seleccionados(self) -> None:
+        """Ejecutar secuencialmente los programas seleccionados, uno tras otro."""
+        self._batch_cancelado = False
+        self._batch_activo = True
+        self.__set_btn_run_all(en_batch=True)
+        try:
+            nombres = [
+                c.nombre_programa for c in self.query(ProgramCard) if c.seleccionado
+            ]
+            for nombre in nombres:
+                if self._batch_cancelado:
+                    break
+                card = self.__buscar_card(nombre)  # re-query: pudo eliminarse mid-batch
+                if card is None or card.ejecutando:
+                    continue
+                try:
+                    prog = cargar_programa(nombre)
+                except Exception:
+                    continue
+                if not (prog.dataset and prog.patron and prog.estrategia):
+                    card.actualizar_combo("Omitido — configuración incompleta")
+                    continue
+                self._batch_actual = nombre
+                worker = self.__lanzar_programa(nombre)
+                try:
+                    await worker.wait()
+                except WorkerFailed:
+                    pass
+        finally:
+            self._batch_actual = None
+            self._batch_activo = False
+            self.__set_btn_run_all(en_batch=False)
+
+    def __cancelar_batch(self) -> None:
+        """Cancelar programa en curso y detener la cola del batch."""
+        self._batch_cancelado = True
+        if self._batch_actual:
+            self._cancelando.add(self._batch_actual)
+            card = self.__buscar_card(self._batch_actual)
+            if card:
+                card.marcar_cancelando()
+
+    def __set_btn_run_all(self, en_batch: bool) -> None:
+        btn = self.query_one("#btn-run-all", Button)
+        btn.label = "Cancelar todo" if en_batch else "▶ Ejecutar sel."
+        btn.variant = "error" if en_batch else "success"
+
+    def __buscar_card(self, nombre: str) -> ProgramCard | None:
+        for card in self.query(ProgramCard):
+            if card.nombre_programa == nombre:
+                return card
+        return None
 
     # ── Helpers privados ──
 
