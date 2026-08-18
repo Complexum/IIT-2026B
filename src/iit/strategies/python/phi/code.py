@@ -20,7 +20,7 @@ from src.iit.strategies.python.func import (
 
 log = SafeLogger("phi")
 
-__PYPHI_ERR: Exception | None = None
+_PYPHI_ERR: Exception | None = None
 try:
     import pyphi as _pyphi_mod
     from pyphi import Network, Subsystem
@@ -30,7 +30,7 @@ try:
     _pyphi_mod.config.VALIDATE_SUBSYSTEM_STATES = False
 except Exception as __e:
     _pyphi_mod = Network = Subsystem = NodeLabels = Bipartition = Part = None
-    __PYPHI_ERR = __e
+    _PYPHI_ERR = __e
 
 
 # @perfilar
@@ -44,7 +44,7 @@ class Phi(SIA, nombre="phi", necesita_mpt=True):
 
     def resolver(self) -> Solution:
         if Subsystem is None or Network is None:
-            raise RuntimeError(f"pyphi no disponible: {__PYPHI_ERR}") from __PYPHI_ERR
+            raise RuntimeError(f"pyphi no disponible: {_PYPHI_ERR}") from _PYPHI_ERR
         t0 = time.perf_counter()
 
         # Build candidato: full system conditioned on background nodes.
