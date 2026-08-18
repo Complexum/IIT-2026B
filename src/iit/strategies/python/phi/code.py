@@ -20,6 +20,14 @@ from src.iit.strategies.python.func import (
 
 log = SafeLogger("phi")
 
+# pyphi 1.2.0 usa ABCs eliminadas de `collections` en Python 3.10+.
+import collections
+import collections.abc
+
+for _abc in ("Iterable", "Sequence", "Mapping"):
+    if not hasattr(collections, _abc):
+        setattr(collections, _abc, getattr(collections.abc, _abc))
+
 _PYPHI_ERR: Exception | None = None
 try:
     import pyphi as _pyphi_mod
