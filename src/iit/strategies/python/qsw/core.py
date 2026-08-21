@@ -23,11 +23,16 @@ El surrogate ``W`` sólo **guía** la búsqueda: toda candidata se re-puntúa co
 ``f`` exacta antes de decidir, así que su error no contamina el resultado.
 """
 
+import itertools
 from typing import Callable, Sequence
 
 import numpy as np
 
 NEG_INF = float("-inf")
+
+#: Tope de máscaras para la pasada 2-opt. Crece como O(V⁴), así que por encima de
+#: esto se omite: a V=40 son 24 k máscaras (5 % del tiempo), a V=100 serían ~10⁸.
+MAX_MASCARAS_2OPT = 200_000
 
 # f_batch(masks) -> array (len(masks),) con f evaluada en cada máscara de vértices.
 FBatch = Callable[[Sequence[int]], np.ndarray]
@@ -225,6 +230,24 @@ def puntuar_candidatas(
     val, mask = evaluar(vecinos)
     if val < mejor_val:
         mejor_val, mejor_mask = val, mask
+
+    # ── 2-opt: mover DOS vértices a la vez ──────────────────────────────────
+    #
+    # Hay óptimos que ningún movimiento simple alcanza. En N5B[36] el 1-opt se
+    # queda en 0.109449 contra 0.037566 del óptimo del oráculo, y el 2-opt lo
+    # encuentra. Cuesta |candidatas|·C(V,2) máscaras en un batch: medido, 9.7 ms
+    # contra 173 ms del Zeta a V=40, o sea 5 % del total.
+    #
+    # El tope existe porque esto crece como O(V⁴): a V≈100 serían ~10⁸ máscaras.
+    # Por encima del tope se omite y la búsqueda se queda con el 1-opt.
+    n_cand = len(dict.fromkeys(candidatas))
+    if n_cand * V * (V - 1) // 2 <= MAX_MASCARAS_2OPT:
+        pares = list(itertools.combinations(range(V), 2))
+        vecinos2 = [m ^ (1 << u) ^ (1 << w)
+                    for m in dict.fromkeys(candidatas) for u, w in pares]
+        val, mask = evaluar(vecinos2)
+        if val < mejor_val:
+            mejor_val, mejor_mask = val, mask
 
     # Rondas siguientes: escalada local desde la ganadora hasta que no mejore.
     for _ in range(max(rondas_reparacion - 1, 0)):

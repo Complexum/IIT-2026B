@@ -63,17 +63,25 @@ class TestNucleoSobreGrafo:
 
     @pytest.mark.parametrize("modo", ["exacto", "estatico"])
     def test_conteo_de_oraculo_es_cuadratico(self, modo):
-        """O(V²) llamadas, no O(V³). Es la métrica que justifica el híbrido."""
+        """La BÚSQUEDA usa O(V²) llamadas, no O(V³): es lo que justifica el híbrido.
+
+        Se mide `generar_candidatas` sola. La reparación posterior (1-opt y 2-opt)
+        es un post-pass aparte y crece como O(V⁴); mezclarla acá escondería la
+        propiedad que el híbrido realmente aporta.
+        """
+        from src.iit.strategies.python.qsw.core import OraculoCache, generar_candidatas
+
         V = 12
         rng = np.random.default_rng(0)
         w = rng.random((V, V))
         w = np.triu(w, 1)
         w += w.T
-        _, _, orc = stoer_wagner_queyranne(V, _f_corte(w), modo=modo)
+        orc = OraculoCache(_f_corte(w))
+        generar_candidatas(V, orc, modo=modo)
         assert orc.llamadas < V**3 / 4
         if modo == "estatico":
-            # Todo el oráculo en un único batch (+ re-scoring/1-opt).
-            assert orc.batches <= 4
+            # Todo el oráculo de la búsqueda en un único batch (+ el seed).
+            assert orc.batches <= 2
 
     def test_mascara_nunca_es_trivial(self):
         w = _grafo(6, ARISTAS)

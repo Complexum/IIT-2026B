@@ -101,14 +101,27 @@ def queyranne(D: int, f: Callable[[int], float], full_mask: int) -> tuple[float,
 
     while len(V) > 1:
         # --- Maximum Adjacency Ordering ---
-        # key[v] = f(A_acumulado ∪ {v}) para v aún no en A
+        # Regla de Queyranne (legal ordering):
+        #
+        #     v_{i+1} = argmin_v [ f(A ∪ {v}) − f({v}) ]
+        #
+        # El término −f({v}) no es decorativo y el sentido tampoco: sobre una f de
+        # corte de grafo, f(A ∪ v) = f(A) + f(v) − 2·w(A,v), de modo que la ganancia
+        # vale f(A) − 2·w(A,v). Como f(A) es constante durante el argmin, minimizarla
+        # equivale a maximizar la adyacencia w(A,v) de Stoer-Wagner. Sin el −f({v}), o
+        # maximizando en vez de minimizar, se elige otro vértice y se pierde la
+        # garantía de par colgante que hace exacto al algoritmo sobre funciones
+        # submodulares.
+        #
+        # `f_solo[v] = f({v})` se calcula una vez: no depende de A.
         remaining = list(V)
         a_mask = 0
-        key: dict[int, float] = {v: f(v) for v in remaining}
+        f_solo: dict[int, float] = {v: f(v) for v in remaining}
+        key: dict[int, float] = dict(f_solo)
         order: list[tuple[int, float]] = []
 
         while remaining:
-            u = max(remaining, key=lambda v: key[v])  # noqa: B023
+            u = min(remaining, key=lambda v: key[v] - f_solo[v])  # noqa: B023
             curr_key = key[u]
             remaining.remove(u)
             order.append((u, curr_key))

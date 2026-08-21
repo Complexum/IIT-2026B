@@ -117,8 +117,9 @@ consultas y `Σ V_p = O(V²)`.
 2. FASES      V−1 × [ MAO con keys incrementales → par colgante (s,t)
                       → candidata miembros[t] → contracción ]
 3. RE-SCORING todas las candidatas con f exacta      1 batch
-4. 1-OPT      mover un vértice de lado (Kernighan-Lin) ≤2 batches
-5. RECONSTRUIR el ganador con EMD real
+4. 1-OPT      mover un vértice — vecinos de TODAS las candidatas, 1 batch
+5. 2-OPT      mover dos vértices — |C|·C(V,2) máscaras, 1 batch, con tope
+6. RECONSTRUIR el ganador con EMD real
 ```
 
 Codificación de vértices sobre un entero de `V = D + N` bits:
@@ -267,5 +268,50 @@ uv run python benchmarks/calibrar_k.py 18 24 4
   CSV es 0.0 siempre: `pynvml` no es dependencia del proyecto, así que
   `NVML_AVAILABLE` es False y nunca se puebla.
 
-- **`queyranne/code.py:111`** — su regla MAO usa `max f(A∪w)`; Queyranne exige
-  `min f(A∪w) − f(w)`. Rompe la garantía de par colgante.
+- ~~**`queyranne/code.py:111`**~~ — corregido: usaba `max f(A∪w)` en vez de
+  `min f(A∪w) − f(w)`. El término `−f({v})` es justamente el que hace coincidir la
+  regla con max-adjacency (§2), así que omitirlo perdía la garantía de par
+  colgante. Pasó de **370/384 a 383/384** contra `phi`.
+
+- ~~**Reparación local insuficiente**~~ — corregido en dos pasos. El 1-opt sólo
+  miraba vecinos de la ganadora; ampliarlo a los de **todas** las candidatas
+  recuperó 3 de las 5 instancias fallidas de N5B. Las otras 2 necesitaban 2-opt:
+  en N5B[36] el 1-opt se queda en 0.109449 contra 0.037566 del óptimo, y ningún
+  movimiento simple cierra esa brecha. Con las dos, `qsw` da **384/384 = 100 %**.
+
+<!-- NOTAS DE INVESTIGACIÓN — 2026-08-21
+
+  Tolerancia de comparación contra `phi`
+  --------------------------------------
+  Usar 1e-6 da lecturas falsas. En N10B seis instancias aparecen como desacuerdo
+  con una desviación de exactamente 1.00e-06: es la resolución de la acumulación
+  float32 del oráculo, no una partición distinta. Los desacuerdos reales están 3-5
+  órdenes de magnitud más arriba (2.3e-04 el de `queyranne`, 7.2e-02 el de `qsw`
+  que motivó el 2-opt). Comparar a 1e-5 separa las dos poblaciones limpio.
+  A 1e-6 los tres métodos daban 98.2 % y quedaban mezclados dos fallos aritméticos
+  con uno algorítmico.
+
+  El conteo O(V²) ya no aplica al total
+  -------------------------------------
+  El 2-opt agrega O(V⁴) consultas como post-pass. La BÚSQUEDA (`generar_candidatas`)
+  sigue en O(V²) — que es la propiedad que aporta el híbrido — pero el total no.
+  `test_conteo_de_oraculo_es_cuadratico` mide ahora `generar_candidatas` sola; si se
+  mide `stoer_wagner_queyranne` entero el test falla, y con razón.
+  Costo medido del 2-opt: 9.7 ms contra 173 ms del Zeta a V=40 (5 % del total),
+  3.7 ms a V=30. El tope `MAX_MASCARAS_2OPT = 200_000` existe porque a V≈100 serían
+  ~10⁸ máscaras.
+
+  Descartado como causa (no volver a investigarlo)
+  ------------------------------------------------
+  Ante una sospecha de que el Zeta o sus optimizaciones estuvieran mal: `analytic`
+  es exhaustivo sobre EL MISMO oráculo y coincide con `phi` 96/96 con max|Δ| = 0
+  en N5B. Si el Zeta, la eliminación del gather, las coordenadas delta o
+  `preparar_ncubos` estuvieran rotos, `analytic` fallaría igual. Es el experimento
+  decisivo y es barato: correr `analytic` sobre una red chica con `phi` disponible.
+
+  Medir tiempos en lotes separados falsea
+  ---------------------------------------
+  N5B y N10A dieron 0.217 s y 0.210 s corridos sueltos contra 0.038 s y 0.068 s
+  dentro del lote: el arranque de sesión (imports, primeras asignaciones en frío)
+  se cuela en el barrido. Comparar siempre dentro de una misma corrida.
+-->

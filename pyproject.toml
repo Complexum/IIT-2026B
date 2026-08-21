@@ -25,6 +25,9 @@ dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
 ]
+anim = [
+    "manim>=0.21.0",
+]
 # Backends paralelos para cluster (qn_mpi / qn_cuda). multiprocessing (qn_mul) es stdlib.
 mpi = ["mpi4py>=3.1"]
 cuda = ["cupy-cuda13x>=13"]  # ajustar al CUDA toolkit del cluster
