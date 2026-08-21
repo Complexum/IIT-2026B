@@ -13,7 +13,9 @@ REDES_DIR = Path("data/input/networks")
 _optimizar_executor = ThreadPoolExecutor(max_workers=1)
 
 
-def generar_red(dimensiones: int, datos_deterministas: bool = True, optimizar: bool = True) -> str:
+def generar_red(
+    dimensiones: int, datos_deterministas: bool = True, optimizar: bool = True
+) -> str:
     """Generar una red (TPM) en notación little-endian y guardarla como CSV.
 
     Args:
@@ -54,6 +56,7 @@ def generar_red(dimensiones: int, datos_deterministas: bool = True, optimizar: b
 
     if optimizar:
         from src.io.manager import optimizar_red
+
         _optimizar_executor.submit(optimizar_red, nombre_base)
 
     return nombre
