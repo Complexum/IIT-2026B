@@ -120,6 +120,21 @@ cli delete execution exec-x
 `compare` sólo enfrenta resultados del mismo `(dataset, patrón)`; los agrupa solo. Flags:
 `--tol` (default `1e-4`), `--ref <estrategia>`, `--plot`, `--paper`, `--no-open`.
 
+### Qué mide el CSV
+
+`tiempo_wall_s` y las columnas de recursos (`tiempo_cpu_s`, `cpu_user_s`, `cpu_sys_s`,
+`mem_rss_mb`) miden **sólo el algoritmo**: el monitor arranca después de reducir el sistema al
+subsistema. Esa preparación va aparte, en `tiempo_preparacion_s`.
+
+La razón es que la preparación cuesta lo mismo para todas las estrategias, así que incluirla actúa
+como una constante compartida que comprime todos los speedups hacia 1. Medido sobre N20A +
+`patron-2`: `qsw+backend=c` aparecía **1.55×** más rápido que `analytic` cuando el algoritmo va
+**3.25×** — más de la mitad de la ventaja quedaba escondida.
+
+> Los CSV generados antes de este cambio no traen `tiempo_preparacion_s`, y en ellos `tiempo_wall_s`
+> sí incluye la preparación. `cli compare` avisa cuando se mezclan: los `perdida` siguen siendo
+> comparables, los tiempos no. Re-ejecutar con `--no-resume` homogeneiza.
+
 CLI y TUI comparten la misma capa de persistencia (JSON en `data/input/`, CSV en `data/output/`), así que se pueden alternar libremente.
 
 ---
@@ -133,7 +148,7 @@ Las estrategias viven en `src/iit/strategies/python/<nombre>/code.py` y se regis
 | `analytic`, `analytic_concurrent`, `analytic_mul`, `analytic_mpi`, `analytic_cuda` | Solución analítica y sus backends paralelos (threads, multiprocessing, MPI, CUDA) |
 | `analytical`, `analytical_concurrent` | Variantes previas de la analítica |
 | `qn`, `qn_mul`, `qn_mpi`, `qn_cuda`, `queyranne` | Familia Queyranne y sus backends paralelos |
-| `qsw` | Queyranne × Stoer-Wagner: MAO con keys incrementales sobre el oráculo Zeta. Opciones `modo` y `backend` |
+| `qsw` | Queyranne × Stoer-Wagner: MAO con keys incrementales sobre el oráculo Zeta. Opciones `modo` (`exacto`/`estatico`/`estocastico`), `backend` (`python`/`c`) y `k` |
 | `force` | Fuerza bruta |
 | `phi` | pyphi como referencia (requiere la TPM completa) |
 
@@ -162,6 +177,15 @@ cli edit execution exec-x --opcion modo=          # borrar una opción
 Las opciones que difieren del default entran en el nombre del CSV
 (`N15A--qsw+modo=estatico--patron-2.csv`), así que dos corridas de la misma estrategia con
 opciones distintas quedan como series separadas en `cli compare` y en las gráficas.
+
+Antes de usar `--opcion backend=c` hay que compilar el kernel:
+
+```bash
+./src/iit/strategies/clang/build.sh
+```
+
+Si falta la librería, la ejecución **aborta antes de empezar** con el comando a correr, en vez de
+fallar una vez por combinación.
 
 > Selección desde el tab Execution de la TUI: pendiente. Hoy las opciones se configuran por CLI y
 > quedan persistidas en el JSON del execution, listas para que la UI las lea.

@@ -3,6 +3,14 @@
 import csv
 from pathlib import Path
 
+# `tiempo_wall_s` y las columnas de recursos miden **sólo el algoritmo**: el
+# monitor arranca después de preparar el subsistema. La preparación cuesta lo
+# mismo para todas las estrategias, así que incluirla comprimía todos los
+# speedups hacia 1 (escondía más de la mitad de la ventaja de `qsw+backend=c`).
+# `tiempo_preparacion_s` guarda ese costo por separado.
+#
+# Los CSV anteriores a este cambio no traen `tiempo_preparacion_s`, y en ellos
+# `tiempo_wall_s` sí incluye la preparación: `compare` avisa al mezclarlos.
 CSV_HEADERS = [
     "indice",
     "estado",
@@ -11,6 +19,7 @@ CSV_HEADERS = [
     "mecanismo",
     "perdida",
     "tiempo_wall_s",
+    "tiempo_preparacion_s",
     "tiempo_cpu_s",
     "cpu_user_s",
     "cpu_sys_s",

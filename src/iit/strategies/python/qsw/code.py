@@ -61,9 +61,11 @@ from src.iit.core.solution import Solution
 from src.iit.strategies.python.fmt import fmt_parts
 from src.iit.strategies.python.qn.oracle import f_cara_batch, preparar_oraculo
 from src.iit.strategies.python.sia import SIA
-from src.iit.strategies.python.qsw.backend import candidatas_c, resolver_backend
+from src.iit.strategies.python.qsw.backend import resolver_backend, zeta_c
+from src.iit.strategies.python.qsw.muestreo import OraculoMuestreado
 from src.iit.strategies.python.qsw.core import (
     OraculoCache,
+    generar_candidatas,
     puntuar_candidatas,
     stoer_wagner_queyranne,
 )
@@ -75,12 +77,21 @@ class QSW(SIA, nombre="qsw"):
     #: Opciones configurables. El primer valor de cada tupla es el default.
     #: `ejecutar(..., opciones={"backend": "c"})` las setea tras validarlas.
     opciones = {
-        "modo": ("exacto", "estatico"),
+        "modo": ("exacto", "estatico", "estocastico"),
         "backend": ("python", "c", "auto"),
+        "k": ("auto", "1024", "2048", "8192", "32768"),
     }
 
     modo: str = "exacto"
     backend: str = "python"
+    k: str = "auto"          # sólo usado por modo=estocastico
+
+    @classmethod
+    def preflight(cls, opciones: dict[str, str] | None = None) -> None:
+        """Resuelve el backend una sola vez: si es `c` y falta la librería, lanza acá
+        y no una vez por fila dentro del barrido."""
+        op = cls.validar_opciones(opciones)
+        resolver_backend(op.get("backend", cls.backend))
 
     def winner(self) -> tuple[tuple[int, ...], tuple[int, ...], float]:
         """Devuelve ``(alcance, mecanismo, valor_oraculo)`` del corte ganador.
@@ -99,7 +110,16 @@ class QSW(SIA, nombre="qsw"):
         D, N = len(dims), len(indices)
         V = D + N
 
-        oraculo = preparar_oraculo(sistema)
+        if self.modo == "estocastico":
+            return self.__winner_estocastico(dims, indices, D, N, V)
+        return self.__winner_zeta(dims, indices, D, N, V, modo=self.modo)
+
+    def __winner_zeta(self, dims, indices, D, N, V, modo: str):
+        """Ruta exacta: oráculo Zeta completo. También es el fallback del muestreo."""
+        sistema = self.sistema
+        # El backend elige el kernel del Zeta, que es donde está el costo real.
+        kernel = zeta_c if resolver_backend(self.backend) == "c" else None
+        oraculo = preparar_oraculo(sistema, kernel=kernel)
         mec_mask = (1 << D) - 1
         desplaz = np.arange(N, dtype=np.int64)
 
@@ -114,27 +134,51 @@ class QSW(SIA, nombre="qsw"):
             alc_bool = ((altos[:, None] >> desplaz) & 1).astype(bool)
             return f_cara_batch(oraculo, masks_mec, alc_bool)
 
-        backend = resolver_backend(self.backend)
-        if backend == "c":
-            # El kernel C sólo BUSCA: devuelve las candidatas de fase. La decisión
-            # final se toma acá con la f exacta, igual que en la ruta Python.
-            vert_kind = np.array([0] * D + [1] * N, dtype=np.int32)
-            vert_slot = np.array(list(range(D)) + list(range(N)), dtype=np.int32)
-            candidatas = candidatas_c(
-                oraculo.sumas, N, D, V, vert_kind, vert_slot, self.modo
-            )
-            candidatas += [1 << u for u in range(V)]  # pre-pass de singletons
-            f = OraculoCache(f_batch)
-            valor, mask = puntuar_candidatas(V, f, candidatas)
-            self._oraculo_stats = f
-        else:
-            valor, mask, self._oraculo_stats = stoer_wagner_queyranne(
-                V, f_batch, modo=self.modo
-            )
+        valor, mask, self._oraculo_stats = stoer_wagner_queyranne(
+            V, f_batch, modo=modo
+        )
 
         mecanismo = tuple(dims[j] for j in range(D) if (mask >> j) & 1)
         alcance = tuple(indices[i] for i in range(N) if (mask >> (D + i)) & 1)
         return alcance, mecanismo, valor
+
+    def __winner_estocastico(self, dims, indices, D, N, V):
+        """Busca muestreando las caras en vez de construir la tabla Zeta.
+
+        Evita el `Θ(D·N·2^D)` del precómputo, que es el 100 % del costo de los
+        modos exactos. La contracción usa el esquema estático de Stoer-Wagner: con
+        un oráculo estimado, refrescar la fila del supernodo con más consultas
+        muestreadas no compra precisión, sólo ruido extra.
+
+        **Compuerta de confianza.** Medido sobre N20A (`patron-2`, 96 combos), el
+        muestreo solo es exacto hasta D≈14 —donde las caras caben bajo K y ni
+        siquiera muestrea— y falla 62–69 % en D=19–20. Las TPM reales tienen
+        empates que el ruido da vuelta; las sintéticas uniformes no y por eso
+        parecían fáciles. Pero el diagnóstico de margen-contra-ruido resultó
+        **100 % preciso** (9/9): cuando dice "confiable", acierta.
+
+        Así que se usa como compuerta: si el margen entre la ganadora y la segunda
+        no supera 2σ del ruido, se rehace con el oráculo Zeta exacto. El resultado
+        es exacto siempre, y el ahorro aparece en las instancias donde el muestreo
+        alcanza.
+        """
+        orc = OraculoMuestreado(self.sistema, k=self.k)
+        cache = OraculoCache(orc.f_batch)
+        candidatas = generar_candidatas(V, cache, modo="estatico")
+        candidatas += [1 << u for u in range(V)]
+
+        # Re-scoring con 8·K: es donde se decide el ganador, así que ahí se gasta.
+        info = orc.confianza(candidatas)
+        self._confianza = info
+        self._fallback_exacto = not info["confiable"]
+
+        if self._fallback_exacto:
+            return self.__winner_zeta(dims, indices, D, N, V, modo="estatico")
+
+        mask = info["mask"]
+        mecanismo = tuple(dims[j] for j in range(D) if (mask >> j) & 1)
+        alcance = tuple(indices[i] for i in range(N) if (mask >> (D + i)) & 1)
+        return alcance, mecanismo, info["valor"]
 
     def resolver(self) -> Solution:
         t0 = time.perf_counter()
@@ -153,9 +197,15 @@ class QSW(SIA, nombre="qsw"):
 
         alcance, mecanismo, _ = self.winner()
 
-        # Reconstrucción REAL del ganador (igual que `qn`): una marginalización
-        # de verdad + EMD real. Salvaguarda contra cualquier deriva del oráculo,
-        # O(N·2^D) amortizado sobre toda la corrida.
+        # Reconstrucción REAL del ganador: una marginalización de verdad + EMD real.
+        #
+        # En `modo=estocastico` esto es deliberado y es lo que hace al modo útil:
+        # el muestreo se usa para BUSCAR (evita el Zeta, que es O(D·N·2^D)), pero
+        # el φ reportado sale de una única evaluación exacta O(N·2^D) — un factor
+        # D más barata. Así la aproximación queda confinada a *qué partición* se
+        # elige, y el φ del CSV sigue siendo exacto y comparable contra `analytic`.
+        # Reportar el valor muestreado en su lugar metía ruido del estimador en
+        # `cli compare`, que se leía como diferencias de calidad y no lo eran.
         dm = self.sistema.bipartir(alcance, mecanismo).distribucion_marginal()
         perdida = emd_efecto(dm, dm_original)
 

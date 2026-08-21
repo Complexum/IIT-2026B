@@ -7,9 +7,13 @@ from pathlib import Path
 from src.cli.utils import console, error, info, parse_kv, success, warn
 from src.iit.core.params import Params
 from src.iit.strategies.python.sia import SIA
-from src.iit.strategies.runner import ejecutar, importar_estrategias
+from src.iit.strategies.runner import (
+    importar_estrategias,
+    preparar_subsistema,
+    resolver_estrategia,
+)
 from src.infra.monitoring.resource_monitor import ResourceMonitor
-from src.io.manager import cargar_mpt
+from src.io.manager import cargar_mpt, preparar_ncubos
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
     build_output_stem,
@@ -25,6 +29,9 @@ from src.tui.test.generadores import etiquetas
 from src.tui.test.helpers import cargar_patron, generar_combinaciones
 
 OUTPUT_DIR = Path("data/output")
+
+# Fallos consecutivos del mismo tipo antes de abortar el barrido.
+MAX_FALLOS_SEGUIDOS = 3
 
 
 def handle(args) -> None:
@@ -53,6 +60,9 @@ def handle(args) -> None:
         return
 
     tpm = cargar_mpt(prog.dataset)
+    # Columnas del TPM una sola vez: rehacerlas por fila era el 66 %
+    # del tiempo del barrido (ver io.manager.preparar_ncubos).
+    ncubos = preparar_ncubos(tpm)
     patron = cargar_patron(prog.patron)
     n_dims = tpm.shape[1]
     combis = generar_combinaciones(patron, n_dims)
@@ -70,14 +80,16 @@ def handle(args) -> None:
             error(str(e))
             return
 
-    # Validar las opciones ANTES de arrancar: mejor fallar acá que en cada fila.
+    # Preflight ANTES de arrancar: valida opciones Y disponibilidad real (backend
+    # sin compilar, dependencia ausente). Sin esto un fallo sistémico se descubre
+    # fila por fila y el barrido termina "completado" con 0 resultados.
+    importar_estrategias()
+    try:
+        SIA.registry[prog.estrategia].preflight(opciones)
+    except Exception as e:
+        error(str(e))
+        return
     if opciones:
-        importar_estrategias()
-        try:
-            SIA.registry[prog.estrategia].validar_opciones(opciones)
-        except ValueError as e:
-            error(str(e))
-            return
         info(f"Opciones: {', '.join(f'{k}={v}' for k, v in sorted(opciones.items()))}")
 
     # La etiqueta mete las opciones no-default en el nombre del CSV, para que
@@ -122,6 +134,8 @@ def handle(args) -> None:
 
     cancelado = False
     filas = 0
+    fallos_seguidos = 0
+    ultimo_error = ""
 
     with progress:
         with output_path.open(modo_apertura, encoding="utf-8", newline="") as f:
@@ -145,9 +159,19 @@ def handle(args) -> None:
 
                 try:
                     params = Params(estado, condicion, alcance, mecanismo)
+
+                    # La preparación NO es parte del algoritmo: cuesta lo mismo
+                    # para todas las estrategias, así que se cronometra aparte y
+                    # el monitor arranca recién después.
+                    t_prep0 = time.perf_counter()
+                    subsistema = preparar_subsistema(tpm, params, ncubos)
+                    t_prep = time.perf_counter() - t_prep0
+
                     monitor = ResourceMonitor()
                     monitor.start()
-                    sol = ejecutar(tpm, params, prog.estrategia, opciones)
+                    sol = resolver_estrategia(
+                        subsistema, prog.estrategia, opciones, tpm, params
+                    )
                     stats = monitor.stop()
                     writer.writerow(
                         [
@@ -158,6 +182,7 @@ def handle(args) -> None:
                             mecanismo,
                             round(float(sol.perdida), 6),
                             stats.tiempo_wall_s,
+                            round(t_prep, 6),
                             stats.tiempo_cpu_s,
                             stats.cpu_user_s,
                             stats.cpu_sys_s,
@@ -168,8 +193,22 @@ def handle(args) -> None:
                         ]
                     )
                     f.flush()
+                    fallos_seguidos = 0
                 except Exception as e:
                     warn(f"Fila {i} falló: {type(e).__name__}: {e}")
+                    # Un fallo sistémico (no un dato raro) se repite idéntico. Cortar
+                    # en vez de escupir un error por combinación y terminar con 0 filas.
+                    if type(e).__name__ == ultimo_error:
+                        fallos_seguidos += 1
+                    else:
+                        ultimo_error, fallos_seguidos = type(e).__name__, 1
+                    if fallos_seguidos >= MAX_FALLOS_SEGUIDOS:
+                        error(
+                            f"{fallos_seguidos} fallos consecutivos de {ultimo_error} — "
+                            f"abortando. Parece un problema de configuración, no de datos."
+                        )
+                        cancelado = True
+                        break
 
                 filas += 1
                 progress.update(task, advance=1)

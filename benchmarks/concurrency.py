@@ -50,7 +50,7 @@ def benchmark(D: int, N: int, n_workers: int = 4):
     sp_hyb = t_seq / t_hyb if t_hyb > 0 else 0
 
     num_part = sum(len(list(combinations(range(D), k))) for k in range(1, D // 2 + 1))
-    
+
     print(
         f"D={D:2d} N={N:6d} P={num_part:4d} | "
         f"Seq: {t_seq * 1000:8.2f}ms | "
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     print("=" * 130)
     print("Benchmark Extendido: Analytic Estrategias (D=5..10)")
     print("=" * 130)
-    
+
     casos = [
         (5, 100),
         (5, 500),
@@ -92,11 +92,11 @@ if __name__ == "__main__":
         (10, 100),
         (10, 500),
     ]
-    
+
     for D, N in casos:
         try:
             benchmark(D, N, n_workers=4)
         except Exception as e:
             print(f"D={D} N={N} ERROR: {e}")
-    
+
     print("=" * 130)

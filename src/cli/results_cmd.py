@@ -45,7 +45,11 @@ def handle(args) -> None:
         return
 
     try:
-        df = pl.read_csv(ruta)
+        # infer_schema_length=0 → todo como texto. Sin esto, `estado` de una red
+        # de 20 nodos ('10000000000000000000') se infiere int64 y desborda:
+        # `cli results` fallaba en cualquier dataset de n>=19. Mismo criterio
+        # que `analysis/compare.py` e `io/loader.py`.
+        df = pl.read_csv(ruta, infer_schema_length=0)
     except Exception as e:
         error(f"Error al leer CSV: {e}")
         return

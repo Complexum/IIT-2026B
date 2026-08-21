@@ -126,13 +126,25 @@ def stoer_wagner_queyranne(
         ``(mejor_valor, mejor_mascara, oraculo)``. ``mejor_mascara`` nunca es
         ∅ ni el conjunto completo (ambos triviales con f = 0).
     """
-    if modo not in ("exacto", "estatico"):
-        raise ValueError(f"modo desconocido: {modo!r} (usar 'exacto' | 'estatico')")
-
     f = OraculoCache(f_batch)
-    full = (1 << V) - 1
     if V < 2:
         return 0.0, 0, f
+    candidatas = generar_candidatas(V, f, modo)
+    mejor_val, mejor_mask = puntuar_candidatas(V, f, candidatas, rondas_reparacion)
+    return mejor_val, mejor_mask, f
+
+
+def generar_candidatas(V: int, f: OraculoCache, modo: str = "exacto") -> list[int]:
+    """Busca: devuelve las máscaras candidatas, sin decidir cuál gana.
+
+    Separado de `stoer_wagner_queyranne` porque la ruta estocástica
+    (`muestreo.py`) usa la misma búsqueda pero re-puntúa las candidatas con más
+    muestras en vez de con el valor que guió el MAO.
+
+    Son el pre-pass de singletons (V) más un par colgante por fase (V−1).
+    """
+    if modo not in ("exacto", "estatico"):
+        raise ValueError(f"modo desconocido: {modo!r} (usar 'exacto' | 'estatico')")
 
     W, singles = seed_weights(V, f)
 
@@ -174,8 +186,7 @@ def stoer_wagner_queyranne(
         f_super = f_super[keep]
         miembros = [miembros[v] for v in keep]
 
-    mejor_val, mejor_mask = puntuar_candidatas(V, f, candidatas, rondas_reparacion)
-    return mejor_val, mejor_mask, f
+    return candidatas
 
 
 def puntuar_candidatas(

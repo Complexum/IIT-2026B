@@ -12,6 +12,28 @@ from src.tui.run.helpers import cargar_programa, extract_program_name
 
 RESULTADOS_DIR = Path("data/output")
 
+# Marca del formato nuevo de CSV. En los anteriores `tiempo_wall_s` incluía la
+# preparación del subsistema; en los nuevos mide sólo el algoritmo. Comparar
+# tiempos entre ambos es peras con manzanas (los `perdida` sí son comparables).
+COL_FORMATO_NUEVO = "tiempo_preparacion_s"
+
+
+def formato_nuevo(name: str) -> bool:
+    """True si el CSV mide el tiempo del algoritmo sin la preparación."""
+    try:
+        cabecera = pl.read_csv(
+            RESULTADOS_DIR / f"{name}.csv", n_rows=0, infer_schema_length=0
+        ).columns
+    except Exception:
+        return False
+    return COL_FORMATO_NUEVO in cabecera
+
+
+def formatos_mezclados(names: list[str]) -> list[str]:
+    """Nombres en formato viejo, si el conjunto mezcla ambos. Lista vacía si no."""
+    viejos = [n for n in names if not formato_nuevo(n)]
+    return viejos if viejos and len(viejos) < len(names) else []
+
 
 def load_result(name: str) -> pl.DataFrame:
     """Carga un CSV de resultado y renombra las columnas de interés."""

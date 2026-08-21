@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from src.iit.core.system import System
-from src.iit.strategies.python.analytic.code import hyperfaces
+from src.iit.strategies.python.zeta import zeta_caras
 
 
 @dataclass
@@ -23,23 +23,24 @@ class Oraculo:
     full_mask: int
     D: int
     pos_idx: dict[int, int] = field(default_factory=dict)  # índice de ncubo -> fila
+    #: `sumas` está en coordenadas delta: la cara lógica `m` vive en
+    #: `pivot_flat ^ m`. Evita una permutación de 2^D (ver `strategies/python/zeta.py`).
+    pivot_flat: int = 0
 
 
-def preparar_oraculo(sistema: System) -> Oraculo:
-    """Precomputa ``sumas[i, m]`` (Zeta sobre δ = H − p) y los mapas auxiliares."""
+def preparar_oraculo(sistema: System, kernel=None) -> Oraculo:
+    """Precomputa ``sumas[i, m]`` (Zeta sobre δ = H − p) y los mapas auxiliares.
+
+    ``kernel``: butterfly alternativo (ver ``zeta.zeta_caras``).
+    """
     dims = sistema.dims
     D = len(dims)
     full_mask = (1 << D) - 1
     pos_dim = {d: i for i, d in enumerate(dims)}
     indices_order = np.fromiter((c.indice for c in sistema.ncubos), dtype=np.int64)
 
-    data_nd = np.stack([c.ndata for c in sistema.ncubos])
-    N = data_nd.shape[0]
-    pivot_idx = tuple(int(sistema.estado_inicial[d]) for d in dims)
-    pivot_vals = data_nd[(slice(None),) + pivot_idx]  # (N,)
-    # Normalización firmada: δ = H − p (pivote queda en 0).
-    delta_nd = data_nd - pivot_vals.reshape((N,) + (1,) * D)
-    sumas = hyperfaces(N, D, delta_nd, pivot_idx)
+    # Ruta rápida: δ = H − p y Zeta en un solo paso, sin gather ni temporales.
+    sumas, pivot_flat = zeta_caras(sistema, kernel=kernel)
 
     return Oraculo(
         sumas=sumas,
@@ -48,6 +49,7 @@ def preparar_oraculo(sistema: System) -> Oraculo:
         full_mask=full_mask,
         D=D,
         pos_idx={int(idx): i for i, idx in enumerate(indices_order)},
+        pivot_flat=pivot_flat,
     )
 
 
@@ -66,8 +68,9 @@ def f_cara(
     cmask = oraculo.full_mask ^ m
     sz_a = bin(m).count("1")
 
-    val_a = np.abs(oraculo.sumas[:, m]) / (1 << sz_a)  # |mean_mec(δ)|
-    val_b = np.abs(oraculo.sumas[:, cmask]) / (1 << (oraculo.D - sz_a))  # |mean_compl(δ)|
+    pf = oraculo.pivot_flat
+    val_a = np.abs(oraculo.sumas[:, pf ^ m]) / (1 << sz_a)  # |mean_mec(δ)|
+    val_b = np.abs(oraculo.sumas[:, pf ^ cmask]) / (1 << (oraculo.D - sz_a))  # |mean_compl(δ)|
 
     if alcance:
         in_alc = np.zeros(oraculo.indices_order.shape[0], dtype=bool)
@@ -107,8 +110,9 @@ def f_cara_batch(
     den_a = np.exp2(sz_a.astype(np.float32), dtype=np.float32)
     den_b = np.exp2((oraculo.D - sz_a).astype(np.float32), dtype=np.float32)
 
-    val_a = np.abs(oraculo.sumas[:, m]) / den_a  # (N, K) = |mean_mec(δ)|
-    val_b = np.abs(oraculo.sumas[:, c]) / den_b  # (N, K) = |mean_compl(δ)|
+    pf = np.int64(oraculo.pivot_flat)
+    val_a = np.abs(oraculo.sumas[:, pf ^ m]) / den_a  # (N, K) = |mean_mec(δ)|
+    val_b = np.abs(oraculo.sumas[:, pf ^ c]) / den_b  # (N, K) = |mean_compl(δ)|
 
     cost = np.where(np.asarray(alc_bool, dtype=bool).T, val_b, val_a)
     return cost.sum(axis=0)

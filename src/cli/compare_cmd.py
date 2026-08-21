@@ -16,6 +16,7 @@ from src.io.manager import listar_resultados
 from src.tui.analysis.compare import (
     build_rich_table_n,
     compare_group_n,
+    formatos_mezclados,
     group_selected,
     parse_result_key,
 )
@@ -64,6 +65,20 @@ def handle(args) -> None:
         return
 
     grupos = group_selected(nombres)
+
+    # Los CSV anteriores al cambio de medición incluyen la preparación del
+    # subsistema en `tiempo_wall_s`; los nuevos no. Los `perdida` son comparables
+    # igual, pero los tiempos no — avisar en vez de dejar sacar conclusiones malas.
+    viejos = formatos_mezclados(nombres)
+    if viejos:
+        warn(
+            "Formatos de medición mezclados: en "
+            + ", ".join(viejos)
+            + " el tiempo incluye la preparación del subsistema; en el resto no. "
+            "Los φ son comparables; los tiempos no. Re-ejecutá con --no-resume "
+            "para homogeneizar."
+        )
+
     tol = args.tol
     info(
         f"{len(nombres)} resultado(s) · {len(grupos)} grupo(s) · tol={tol:.0e}\n"

@@ -286,26 +286,37 @@ def build_mpi_command(prog: "Programa") -> list[str]:
 
 
 def listar_estrategias() -> list[str]:
-    """Descubre estrategias disponibles en src/iit/strategies/python/.
+    """Estrategias **ejecutables**, leídas del registro de `SIA`.
 
-    Cada subdirectorio con un code.py es una estrategia.
+    Antes esto listaba nombres de carpeta, lo que dejaba entrar cosas que no se
+    pueden correr: un `code.py` vacío (placeholder), un import roto, o una carpeta
+    cuyo `nombre=` registrado no coincide con ella. Aparecían en el dropdown de la
+    TUI y en `cli run`, y fallaban al ejecutar con "Estrategia desconocida".
+
+    El registro es la fuente de verdad: `importar_estrategias()` recorre las mismas
+    carpetas y `SIA.__init_subclass__` registra sólo lo que efectivamente se importó
+    y declaró un nombre.
     """
+    from src.iit.strategies.python.sia import SIA
+    from src.iit.strategies.runner import importar_estrategias
+
+    importar_estrategias()
+    registradas = set(SIA.registry)
+
     ruta = Path("src/iit/strategies/python")
-    if not ruta.exists():
-        return []
+    if ruta.exists():
+        for d in sorted(ruta.iterdir()):
+            if not d.is_dir() or d.name.startswith("__"):
+                continue
+            if not (d / "code.py").exists():
+                logging.warning(f"Strategy directory '{d.name}' excluded: missing code.py")
+            elif d.name not in registradas:
+                logging.warning(
+                    f"Strategy directory '{d.name}' excluded: no registra ninguna "
+                    f"estrategia (¿code.py vacío o import roto?)"
+                )
 
-    estrategias = []
-    for d in ruta.iterdir():
-        if not d.is_dir() or d.name.startswith("__"):
-            continue
-
-        if (d / "code.py").exists():
-            estrategias.append(d.name)
-        else:
-            # Log warning for directories that lack code.py
-            logging.warning(f"Strategy directory '{d.name}' excluded: missing code.py")
-
-    return sorted(estrategias)
+    return sorted(registradas)
 
 
 # ── Estimación de tiempo ─────────────────────────────────

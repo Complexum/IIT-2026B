@@ -134,7 +134,7 @@ class TestOraculo:
 
 
 class TestEstrategia:
-    @pytest.mark.parametrize("modo", ["exacto", "estatico"])
+    @pytest.mark.parametrize("modo", ["exacto", "estatico", "estocastico"])
     def test_registrada_y_ejecutable(self, modo):
         import math
 
@@ -205,7 +205,7 @@ class TestOpciones:
     def test_defaults(self):
         from src.iit.strategies.python.qsw.code import QSW
 
-        assert QSW.defaults() == {"modo": "exacto", "backend": "python"}
+        assert QSW.defaults() == {"modo": "exacto", "backend": "python", "k": "auto"}
 
     @pytest.mark.parametrize(
         "opciones, mensaje",
@@ -244,3 +244,114 @@ class TestOpciones:
         assert etiqueta_estrategia("qsw", None) == "qsw"
         assert etiqueta_estrategia("qsw", {"modo": "exacto"}) == "qsw"
         assert etiqueta_estrategia("qsw", {"modo": "estatico"}) == "qsw+modo=estatico"
+
+
+class TestMuestreo:
+    """`modo=estocastico`: nunca construye la tabla de 2^D caras."""
+
+    def test_k_escala_con_la_red(self):
+        """K fijo y chico falla al crecer la red (n=16/K=256 erró 68 % en el
+        prototipo). Por eso K crece con N en vez de quedarse quieto."""
+        from src.iit.strategies.python.qsw.muestreo import K_BASE, k_efectivo
+
+        assert k_efectivo(4) == K_BASE                 # redes chicas: piso
+        assert k_efectivo(64) > k_efectivo(8)          # crece con N
+        assert k_efectivo(10, "8192") == 8192          # override explícito
+
+    def test_caras_chicas_son_exactas(self):
+        """Muestrear más puntos que celdas tiene no aporta nada y es donde vive
+        el error: si 2^|A| <= K la cara se suma entera."""
+        from src.iit.strategies.python.qsw.muestreo import OraculoMuestreado
+
+        sistema = _subsistema()
+        orc = OraculoMuestreado(sistema, k="1024")
+        D = len(sistema.dims)
+        orc.f_batch([1, 3, (1 << D) - 1])
+        assert orc.caras_exactas > 0
+
+    def test_no_materializa_las_2_a_la_D_caras(self):
+        """La tabla Zeta es (N, 2^D); el muestreo sólo guarda O(D²) medias."""
+        from src.iit.strategies.python.qsw.muestreo import OraculoMuestreado
+
+        sistema = _subsistema()
+        D, N = len(sistema.dims), len(sistema.indices)
+        orc = OraculoMuestreado(sistema)
+        orc.f_batch([1 << u for u in range(D + N)])
+        assert len(orc._cache) <= 2 * (D + N) + 2
+
+    def test_reporta_confianza_en_vez_de_afirmar_exactitud(self):
+        from src.iit.strategies.python.qsw.muestreo import OraculoMuestreado
+
+        sistema = _subsistema()
+        D, N = len(sistema.dims), len(sistema.indices)
+        orc = OraculoMuestreado(sistema)
+        info = orc.confianza([1 << u for u in range(D + N)])
+        assert set(info) == {"mask", "valor", "margen", "ruido", "confiable"}
+        assert info["ruido"] >= 0.0
+
+    def test_coincide_con_analytic(self):
+        tpm = cargar_mpt(RED)
+        n = tpm.shape[1]
+        params = Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n)
+        ref = ejecutar(tpm, params, "analytic").perdida
+        got = ejecutar(tpm, params, "qsw", opciones={"modo": "estocastico"}).perdida
+        assert abs(got - ref) < 1e-6
+
+
+class TestMedicionDeTiempo:
+    """El CSV debe medir el algoritmo, no la preparación del subsistema.
+
+    Antes el `ResourceMonitor` envolvía `ejecutar()`, que incluye
+    `reducir_a_subsistema`. Como esa preparación cuesta lo mismo para todas las
+    estrategias, actuaba como constante compartida y comprimía los speedups hacia
+    1: medido sobre N20A, `qsw+backend=c` aparecía 1.55× cuando el algoritmo va
+    3.25×.
+    """
+
+    def test_monitor_envuelve_solo_el_algoritmo(self):
+        """El reloj externo y el que la estrategia se mide sola deben coincidir.
+
+        Si difieren mucho, el monitor volvió a envolver la preparación.
+        """
+        import time
+
+        from src.iit.strategies.runner import preparar_subsistema, resolver_estrategia
+
+        tpm = cargar_mpt(RED)
+        n = tpm.shape[1]
+        params = Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n)
+
+        sub = preparar_subsistema(tpm, params)
+        t0 = time.perf_counter()
+        sol = resolver_estrategia(sub, "qsw")
+        externo = time.perf_counter() - t0
+
+        assert sol.tiempo_ejecucion == pytest.approx(externo, abs=5e-3)
+
+    def test_preparar_y_resolver_equivalen_a_ejecutar(self):
+        from src.iit.strategies.runner import preparar_subsistema, resolver_estrategia
+
+        tpm = cargar_mpt(RED)
+        n = tpm.shape[1]
+        params = Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n)
+
+        compuesto = ejecutar(tpm, params, "qsw").perdida
+        separado = resolver_estrategia(preparar_subsistema(tpm, params), "qsw").perdida
+        assert compuesto == separado
+
+    def test_csv_trae_la_columna_de_preparacion(self):
+        from src.tui.run.csv_utils import CSV_HEADERS
+
+        assert "tiempo_preparacion_s" in CSV_HEADERS
+        # `tiempo_wall_s` se conserva: los nueve consumidores lo leen y ahora
+        # significa lo correcto, así que ninguno necesitó cambiar.
+        assert "tiempo_wall_s" in CSV_HEADERS
+
+    def test_detecta_formatos_mezclados(self):
+        """CSV viejos (sin la columna) miden otra cosa: hay que avisar, no callar."""
+        from src.tui.analysis.compare import formato_nuevo, formatos_mezclados
+
+        assert formatos_mezclados([]) == []
+        # Un conjunto homogéneo no dispara aviso, sea del formato que sea.
+        assert formatos_mezclados(["no/existe/a", "no/existe/b"]) == []
+        assert formato_nuevo("no/existe") is False

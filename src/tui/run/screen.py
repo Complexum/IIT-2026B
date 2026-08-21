@@ -18,12 +18,18 @@ from textual.widgets import Button, Checkbox, Label, Rule
 from textual.worker import Worker, WorkerFailed
 
 from src.iit.core.params import Params
-from src.iit.strategies.runner import ejecutar
+from src.iit.strategies.python.sia import SIA
+from src.iit.strategies.runner import (
+    importar_estrategias,
+    preparar_subsistema,
+    resolver_estrategia,
+)
 from src.infra.middlewares.slogger import get_logger
 from src.infra.monitoring.resource_monitor import ResourceMonitor
-from src.io.manager import cargar_mpt, dims_de_red
+from src.io.manager import cargar_mpt, dims_de_red, preparar_ncubos
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
+    etiqueta_estrategia,
     Programa,
     build_mpi_command,
     build_output_stem,
@@ -224,6 +230,9 @@ class ExecutionScreen(Widget):
                 return
 
             tpm = cargar_mpt(prog.dataset)
+            # Columnas del TPM una sola vez: rehacerlas por fila era el
+            # 66 % del barrido (ver io.manager.preparar_ncubos).
+            ncubos = preparar_ncubos(tpm)
             patron = cargar_patron(prog.patron)
             n_dims = tpm.shape[1]
             combis = generar_combinaciones(patron, n_dims)
@@ -233,8 +242,27 @@ class ExecutionScreen(Widget):
                 log.warn(f"Program '{nombre}': patron produces 0 combinations")
                 return
 
+            # Preflight: valida opciones y disponibilidad real antes de arrancar.
+            # Sin esto un backend sin compilar falla una vez por fila y la corrida
+            # termina "completada" con 0 resultados.
+            opciones = dict(prog.opciones or {})
+            importar_estrategias()
+            try:
+                SIA.registry[prog.estrategia].preflight(opciones)
+            except Exception as exc:
+                log.warn(f"Program '{nombre}' preflight failed: {exc}")
+                self.app.call_from_thread(
+                    self.__update_card_combo, nombre, f"✗ {exc}".splitlines()[0]
+                )
+                prog.estado = "error"
+                guardar_programa(prog)
+                return
+
             output_stem = build_output_stem(
-                nombre, prog.dataset, prog.patron, prog.estrategia
+                nombre,
+                prog.dataset,
+                prog.patron,
+                etiqueta_estrategia(prog.estrategia, opciones),
             )
             output_path = OUTPUT_DIR / f"{output_stem}.csv"
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -250,6 +278,7 @@ class ExecutionScreen(Widget):
                 "dataset": prog.dataset,
                 "patron": prog.patron,
                 "estrategia": prog.estrategia,
+                "opciones": opciones,
             }
             checkpoint_valido = bool(completados) and meta is not None and all(
                 meta.get(k) == v for k, v in params_actuales.items()
@@ -304,9 +333,17 @@ class ExecutionScreen(Widget):
                     )
                     try:
                         params = Params(estado, condicion, alcance, mecanismo)
+                        # La preparación NO es parte del algoritmo: se cronometra aparte y el
+                        # monitor arranca recién después (ver csv_utils.CSV_HEADERS).
+                        t_prep0 = time.perf_counter()
+                        subsistema = preparar_subsistema(tpm, params, ncubos)
+                        t_prep = time.perf_counter() - t_prep0
+
                         monitor = ResourceMonitor()
                         monitor.start()
-                        sol = ejecutar(tpm, params, prog.estrategia)
+                        sol = resolver_estrategia(
+                            subsistema, prog.estrategia, opciones, tpm, params
+                        )
                         stats = monitor.stop()
                         writer.writerow(
                             [
@@ -317,6 +354,7 @@ class ExecutionScreen(Widget):
                                 mecanismo,
                                 round(float(sol.perdida), 6),
                                 stats.tiempo_wall_s,
+                                round(t_prep, 6),
                                 stats.tiempo_cpu_s,
                                 stats.cpu_user_s,
                                 stats.cpu_sys_s,
@@ -393,6 +431,7 @@ class ExecutionScreen(Widget):
                 "dataset": prog.dataset,
                 "patron": prog.patron,
                 "estrategia": prog.estrategia,
+                "opciones": opciones,
             }
             checkpoint_valido = bool(completados) and meta is not None and all(
                 meta.get(k) == v for k, v in params_actuales.items()

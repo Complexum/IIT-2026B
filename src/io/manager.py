@@ -103,29 +103,57 @@ def desoptimizar_red(nombre: str) -> bool:
     return False
 
 
-def crear_sistema(tpm: np.ndarray, estado_inicial: tuple[int, ...]) -> System:
-    """Construir un System a partir de una MPT y estado inicial.
+def preparar_ncubos(tpm: np.ndarray) -> tuple[NCube, ...]:
+    """Columnas de la MPT como NCubes contiguos.
 
-    Cada columna de la MPT se convierte en un NCube.
+    **No dependen del estado inicial**, así que en un barrido se construyen una
+    sola vez y se comparten entre todas las filas. Es seguro: `NCube` es frozen y
+    `condicionar` / `marginalizar` devuelven cubos nuevos, nunca mutan `data`.
+
+    Medido sobre N20A + `patron-2` (96 combinaciones), rehacerlos por fila era el
+    **66 %** del tiempo total del barrido: 20 columnas × 8 MB × 96 filas ≈ 16 GB
+    de copias idénticas.
     """
     n_dims = tpm.shape[1]
     dims = tuple(range(n_dims))
-    ncubos = tuple(
-        NCube(indice=i, dims=dims, data=tpm[:, i].copy()) for i in range(n_dims)
+    return tuple(
+        NCube(indice=i, dims=dims, data=np.ascontiguousarray(tpm[:, i]))
+        for i in range(n_dims)
     )
+
+
+def crear_sistema(
+    tpm: np.ndarray,
+    estado_inicial: tuple[int, ...],
+    ncubos: tuple[NCube, ...] | None = None,
+) -> System:
+    """Construir un System a partir de una MPT y estado inicial.
+
+    Cada columna de la MPT se convierte en un NCube. `ncubos` permite reutilizar
+    los de `preparar_ncubos` en lugar de recrearlos (ver su docstring).
+    """
+    if ncubos is None:
+        ncubos = preparar_ncubos(tpm)
     return System(estado_inicial=estado_inicial, ncubos=ncubos)
 
 
-def reducir_a_subsistema(tpm: np.ndarray, params: Params) -> System:
+def reducir_a_subsistema(
+    tpm: np.ndarray,
+    params: Params,
+    ncubos: tuple[NCube, ...] | None = None,
+) -> System:
     """Sistema completo → candidato (condicionar) → subsistema (substraer).
 
     La preparación queda fuera de las estrategias: quien ejecuta llama aquí
     una vez por (tpm, params) y pasa el subsistema resultante a la estrategia.
     Así se puede reutilizar la misma estrategia para muchos params sin
     re-leer TPM ni repetir lógica.
+
+    En un barrido, pasar `ncubos=preparar_ncubos(tpm)` una vez evita rehacer las
+    columnas en cada fila.
     """
     estado = params.estado_tuple()
-    completo = crear_sistema(tpm, estado)
+    completo = crear_sistema(tpm, estado, ncubos)
     dims_cond = params.dims_condicionar()
     candidato = completo.condicionar(dims_cond)
     alcance = params.dims_alcance()

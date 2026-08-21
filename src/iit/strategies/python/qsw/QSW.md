@@ -6,15 +6,19 @@ Híbrido entre el andamiaje de **Stoer-Wagner** (JACM 1997) y el oráculo Zeta e
 Una sola estrategia registrada, `qsw`, con dos atributos configurables declarados en
 `QSW.opciones` (ver `SIA.opciones` y el README):
 
-- `modo`: `exacto` (default) | `estatico`
-- `backend`: `python` (default) | `c` | `auto`
+- `modo`: `exacto` (default) | `estatico` | `estocastico` — ver §7
+- `backend`: `python` (default) | `c` | `auto` — el kernel C hace el **Zeta**, no el MAO
+- `k`: `auto` (default) | un entero — sólo lo usa `modo=estocastico`
 
 ```bash
-cli run execution program-10 --opcion modo=estatico
+cli run execution program-21 --opcion modo=estatico
+cli run execution program-24 --opcion backend=c        # requiere clang/build.sh
 ```
 
-Módulos, una responsabilidad cada uno: `core.py` el algoritmo · `backend.py` la selección y
-carga del kernel · `code.py` el glue con `SIA` · `reference.py` el port crudo de Stoer-Wagner.
+Módulos, una responsabilidad cada uno: `core.py` el algoritmo · `muestreo.py` el
+oráculo estimado · `backend.py` la selección y carga del kernel · `code.py` el glue
+con `SIA` · `reference.py` el port crudo de Stoer-Wagner. La transformada Zeta vive
+en `src/iit/strategies/python/zeta.py`, compartida con `analytic` y la familia `qn`.
 
 ---
 
@@ -54,7 +58,7 @@ candidatas de par colgante de Queyranne.
 
 ## 3. Qué se roba de Stoer-Wagner
 
-Queyranne consulta el oráculo dentro del MAO: `f(A∪w)` para cada `w` restante, en cada paso →
+Queyranne consulta el oráculo dentro del MAO: $f(A \cup w)$ para cada `w` restante, en cada paso →
 **O(V³)** consultas de cota. Stoer-Wagner no consulta nada: mantiene una matriz densa `W` y
 actualiza `key[w] += W[t][w]` en O(1).
 
@@ -80,7 +84,7 @@ aproximada esa suma deja de serlo y el error se acumula a lo largo de las V cont
 | modo | tras contraer | consultas | forma |
 |---|---|---|---|
 | `modo=estatico` | `W[s] += W[t]` (Stoer-Wagner puro) | O(V²), **1 batch upfront** | 100 % paralelizable (multiproc / CUDA / kernel C) |
-| `modo=exacto` (default) | recalcula sólo la fila del supernodo: `W[st][v] = (f(st) + f(v) − f(st∪v))/2` | O(V²), en O(V) batches | sin drift |
+| `modo=exacto` (default) | recalcula sólo la fila del supernodo: `W[st][v] = (f(st) + f(v) − f(st ∪ v))/2` | O(V²), en O(V) batches | sin drift |
 
 Mismo orden las dos: sólo nace **un** supernodo por fase, así que refrescar su fila cuesta `V_p`
 consultas y `Σ V_p = O(V²)`.
@@ -112,77 +116,107 @@ recursivo en cada consulta.
 
 ---
 
-## 6. Complejidad y medición
+## 6. Complejidad: lo que el O(V³) NO dice
 
-| Etapa | Costo | Oráculo |
-|---|---|---|
-| Precómputo Zeta (`hyperfaces`, compartido con `analytic`/`qn`) | `O(D·N·2^D)`, una vez | — |
-| Seed de `W` | `O(V²·N)` flops | 1 batch |
-| MAO + contracciones | `O(V³)` flops vectorizados | 0 (estático) / `O(V²)` en O(V) batches (exacto) |
-| Re-scoring + 1-opt | `O(V·N)` | 1–3 batches |
+`O(V³)` (Queyranne) y `O(V²)` (QSW) cuentan **llamadas al oráculo**, no tiempo.
+Construir el oráculo es `Θ(D·N·2^D)`, y ese término domina:
 
-**Nota:** Stoer-Wagner NO es O(n²) — es `O(V³)` denso, `O(VE + V² log V)` con heap. Lo que baja a
-`O(V²)` es el **conteo de consultas al oráculo**.
+| | n=18 | n=20 | n=22 |
+|---|---|---|---|
+| Zeta (`preparar_oraculo`) | 0.037 s | 0.178 s | 0.957 s |
+| **TOTAL `qsw`** | 0.043 s | 0.197 s | **0.946 s** |
 
-**Nota 2:** la cota de Queyranne es `O(V³)` consultas, pero el `memoria_bipart` de `qn` colapsa las
-repetidas y en la práctica evalúa ~1.3·V² cortes distintos (V=30: 1193 vs V³=27000). La ganancia
-real de QSW no es el conteo sino la **forma**: `qn` paga un round-trip Python→numpy por consulta,
-QSW agrupa las mismas lecturas en O(V) batches.
+A n=22 el precómputo *es* la corrida entera; la búsqueda son 2.8 ms. Y corre a
+**17–19 GB/s**, o sea saturando el ancho de banda de DRAM: está limitado por
+memoria, no por cómputo.
 
-Medido (V = D+N, TPMs sintéticas, `scratchpad/split2.py`):
+Hay además un piso duro de `Ω(N·2^D)`: la entrada misma son N·2^D probabilidades
+(cada `NCube` tiene 2^D celdas). **Ningún algoritmo exacto puede ser polinómico
+en D** — no se puede ser más rápido que leer la propia entrada. Por eso `qsw` le
+gana a `analytic` por un factor constante y no por uno exponencial.
 
-| V | zeta (compartido) | búsqueda `qsw` | búsqueda `estatico` | TOT `analytic` | TOT `qn` | TOT `qsw` |
-|---:|---:|---:|---:|---:|---:|---:|
-| 32 | 0.0098 s | 0.0022 s | 0.0008 s | 0.0135 s | 0.0267 s | 0.0108 s |
-| 36 | 0.0467 s | 0.0019 s | 0.0010 s | 0.0611 s | 0.0633 s | 0.0420 s |
-| 40 | 0.2849 s | 0.0023 s | 0.0012 s | 0.3361 s | 0.2159 s | 0.1885 s |
-| 44 | 1.7642 s | 0.0028 s | 0.0014 s | 2.4364 s | 2.0888 s | 1.2417 s |
+Corolario para las versiones paralelas: siendo bandwidth-bound, más hilos en la
+misma máquina compran poco (comparten DRAM). GPU (HBM ~1 TB/s) y MPI entre nodos
+—cada uno con su memoria— sí.
 
-La búsqueda de QSW es prácticamente **plana** (2.2 → 2.8 ms de V=32 a V=44). A partir de V≈40 el
-costo de `qsw` *es* el precómputo Zeta —inherente a los datos, compartido con `analytic` y `qn`—.
-`analytic` en cambio sigue enumerando `2^(D−1)` máscaras.
+### Lo que sí se optimizó
 
-Consultas al oráculo, sistema completo N15A/N15B (D=N=15, V=30):
+| Cambio | Ganancia medida |
+|---|---|
+| `hyperfaces` sin gather (`zeta.py`) | 1.3× sobre el Zeta; el gather era el 95 % y asignaba 738 MB de índices a D=22 |
+| Kernel C del Zeta (`backend=c`) | **5–10×** sobre el Zeta de numpy, bit-exacto |
+| `preparar_ncubos` compartidos | 3× en la reducción de subsistema (9.5 s → 3.2 s en un barrido de 96 filas) |
 
-| | consultas | batches |
+Medido y **descartado**: radix-4 en numpy (0 %, el slicing strided recorre el
+arreglo igual — por eso vive en C) y float32 desde el origen (~4 %).
+
+### Sobre datos reales (N20A + `patron-2`, 96 combinaciones, vía CLI)
+
+Tiempo **del algoritmo**, sin la preparación del subsistema (que cuesta ~3.2 s para todas por
+igual, y que antes se incluía en la medición escondiendo más de la mitad de la ventaja):
+
+| | algoritmo | speedup vs `analytic` |
 |---|---:|---:|
-| `qn` | 1193 – 1825 | 1193 – 1825 |
-| `qsw` | 871 | **29** |
-| `qsw` (`modo=estatico`) | 490 | **2** |
+| `analytic` | 3.211 s | 1.00× |
+| `qn` | 3.281 s | 0.98× |
+| `qsw` | 2.182 s | 1.47× |
+| `qsw+backend=c` | **0.989 s** | **3.25×** |
+| `qsw+modo=estocastico` | 4.955 s | 0.65× |
 
-**Exactitud:** 96/96 combinaciones de `patron-2` sobre N15A coinciden con `analytic` (exacto),
-error relativo máximo 0.00 %, para `qsw`, `modo=estatico`, `qn` y `queyranne`. En el barrido sintético
-n = 10…20 tampoco hay ninguna divergencia.
+96/96 exacto contra `analytic` en todos los casos.
+
+**Dónde está ahora el cuello de botella:** `reducir_a_subsistema` era el 75 % del
+barrido; tras compartir los NCubes bajó, pero sigue siendo la porción mayor. El
+barrido de `patron-2` tiene D mediano 12 (48 de 96 combos son D=9–10, o sea 2^10
+celdas), así que las estrategias ya son casi gratis ahí. Optimizarlas más no
+mueve la aguja en este flujo; el trabajo está en la preparación del subsistema.
 
 ---
 
-## 7. Trabajo pendiente
+## 7. `modo=estocastico`: el único modo de romper el 2^D
 
-- **Kernel C** — `src/iit/strategies/clang/qsw/code.c` (hoy vacío). Se activa con
-  `--opcion backend=c`; si la librería no está compilada falla explícito (nunca cae a Python
-  en silencio: la opción entra en el nombre del CSV y el resultado mentiría). El `O(V³)` restante es
-  aritmética densa; portarlo junto con la lectura del oráculo (`sumas` es un `float*`):
+Estima las medias de cara con K celdas muestreadas en vez de sumar las 2^|A|
+(ver `muestreo.py`). Nunca construye la tabla de 2^D caras, así que el costo pasa
+de `O(D·N·2^D)` a `O(N·K·D²)`.
 
-  ```c
-  int qsw_solve(const float *sumas, int N, int D, int V,
-                const int *vert_kind, const int *vert_slot, int modo,
-                uint64_t *out_candidatos, double *out_valores, int *out_n);
-  ```
+**Resultado honesto:** sobre TPMs sintéticas uniformes daba 4/4 exacto con hasta
+27× a n=24. Sobre datos **reales** (N20A) fallaba **62–69 % en D=19–20** — las TPM
+reales tienen empates que el ruido de muestreo da vuelta; las uniformes no, y por
+eso parecían fáciles.
 
-  `V ≤ 64` → `uint64_t`. Compilar a `clang/__cache__/libqsw.so`, cargar con `ctypes`, fallback
-  silencioso a Python. **Nota de prioridad:** con la búsqueda ya en ~3 ms, el kernel C rinde poco
-  ahí; el blanco real es el **precómputo Zeta**, que es donde se va el 99 % del tiempo a V≥40.
+Lo que lo salva: el diagnóstico de margen-contra-ruido resultó **100 % preciso**
+(9/9 en la muestra). Cuando dice "confiable", acierta. Así que se usa como
+**compuerta**: si el margen entre la ganadora y la segunda no supera 2σ del ruido,
+se rehace con el Zeta exacto. Con eso el modo da 96/96 exacto sobre N20A.
 
-- **Paralelización** — `modo=estatico` deja todo el oráculo en un único batch: es el candidato natural
-  para multiprocessing / CUDA. Igual que arriba, el Zeta manda.
+El ahorro aparece sólo donde el muestreo alcanza. En `patron-2`/N20A casi nunca
+alcanza (D mediano 12, donde ni siquiera muestrea), así que el modo **hoy no paga
+en ese barrido**: 9.12 s contra 6.62 s del exacto. Sirve para D grande y uniforme,
+y el `!` del calibrador marca cuándo no confiar.
 
-- **Zeta in-place** — `analytic.hyperfaces` asigna un segundo arreglo `N·2^D`; hacerlo sobre
-  `delta_nd` reduce el pico de memoria a la mitad (3.35 GB → 1.7 GB a D=N=25).
+Calibrar K con datos, no a ojo:
 
-- **Selección de opciones desde el tab Execution de la TUI** — pendiente. `Programa.opciones`
-  ya persiste en el JSON del execution; falta un `Select` por opción en `ProgramCard`
-  (`src/tui/run/widgets.py`), poblado desde `SIA.registry[estrategia].opciones`.
+```bash
+uv run python benchmarks/calibrar_k.py 18 24 4
+```
+
+---
+
+## 8. Trabajo pendiente
+
+- **`reducir_a_subsistema`** — es la porción mayor del barrido. `crear_sistema`
+  ya no recopia las columnas por fila (`preparar_ncubos`), pero `condicionar` y
+  `substraer` siguen construyendo índices por llamada.
+
+- **Muestreo sin materializar el subsistema** — hoy `reducir_a_subsistema` arma
+  los N·2^D valores antes de que la estrategia empiece, así que el muestreo evita
+  el factor **D** del Zeta pero no el `2^D` de la carga. Para ser realmente
+  sub-exponencial habría que muestrear del TPM mapeado (`cargar_mpt` ya usa
+  `mmap` cuando existe el sidecar `.npy`).
+
+- **Paralelizar el Zeta** — las N filas son independientes. En CPU el techo es el
+  bus de memoria; en GPU (HBM) hay margen real. `qsw_zeta` está listo para
+  OpenMP sobre el bucle de filas.
 
 - **`queyranne/code.py:111`** — su regla MAO usa `max f(A∪w)`; Queyranne exige
-  `min f(A∪w) − f(w)`. Rompe la garantía de par colgante. Además no usa el oráculo Zeta, y por eso
-  es la estrategia más lenta del conjunto (2.27 s a V=40, 10× peor que `qsw`).
+  `min f(A∪w) − f(w)`. Rompe la garantía de par colgante.

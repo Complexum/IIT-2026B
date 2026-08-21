@@ -82,6 +82,30 @@ class SIA(ABC):
         for attr, valor in type(self).validar_opciones(opciones).items():
             setattr(self, attr, valor)
 
+    @classmethod
+    def preflight(cls, opciones: dict[str, str] | None = None) -> None:
+        """Verifica que la estrategia pueda correr **antes** de empezar el barrido.
+
+        `validar_opciones` sólo mira que el atributo exista y el valor sea admisible;
+        no dice nada sobre disponibilidad real (una librería sin compilar, un backend
+        ausente). Sin este hook un fallo sistémico se descubre fila por fila: el
+        barrido escupe un error por combinación y termina con 0 resultados.
+
+        Es `classmethod` a propósito: se comprueba sin construir un `System`, así que
+        el chequeo no cuesta nada y se puede hacer apenas se conoce la estrategia.
+
+        Default: valida las opciones y que la clase no siga siendo abstracta. Las
+        estrategias que dependen de algo externo la sobrescriben y lanzan con un
+        mensaje accionable.
+        """
+        pendientes = getattr(cls, "__abstractmethods__", None)
+        if pendientes:
+            raise RuntimeError(
+                f"'{cls.nombre}' no está implementada: falta "
+                f"{', '.join(sorted(pendientes))}. Es un esqueleto todavía."
+            )
+        cls.validar_opciones(opciones)
+
     def __init__(self, subsistema: System) -> None:
         self.sistema: System = subsistema
         self.distribucion: NDArray[np.float32] = subsistema.distribucion_marginal()
