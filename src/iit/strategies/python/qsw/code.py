@@ -83,7 +83,7 @@ class QSW(SIA, nombre="qsw"):
     }
 
     backend: str = "python"
-    modo: str = "exacto"
+    modo: str = "estatico"
     k: str = "auto"  # uso en modo=estocastico
 
     @classmethod
