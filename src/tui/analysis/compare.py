@@ -270,15 +270,19 @@ def build_rich_table_tiempos(resumen: dict[str, dict]) -> Table:
             ),
         )
 
-    mejor = orden[0][1]["mediana"]
-    tabla.add_row(
-        "vs mejor",
-        *(
-            "—" if i == 0
-            else (f"{s['mediana'] / mejor:.2f}x" if mejor > 0 else "—")
-            for i, (_, s) in enumerate(orden)
-        ),
-    )
+    # Las dos últimas filas van etiquetadas "más lento" y no "vs mejor": un `3.93x`
+    # a secas en la columna de una estrategia se lee como si ESA hubiera ganado
+    # 3.93x, cuando es al revés — es cuánto más tarda que la mejor.
+    for etiqueta, clave in (("más lento (mediana)", "mediana"), ("más lento (total)", "total")):
+        mejor = min(s[clave] for _, s in orden)
+        tabla.add_row(
+            etiqueta,
+            *(
+                "—" if (mejor <= 0 or s[clave] == mejor)
+                else f"{s[clave] / mejor:.2f}x"
+                for _, s in orden
+            ),
+        )
     return tabla
 
 

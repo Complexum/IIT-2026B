@@ -212,10 +212,23 @@ def puntuar_candidatas(
 
     mejor_val, mejor_mask = evaluar(candidatas)
 
-    # Reparación 1-opt: mover un vértice de lado a la vez (Kernighan-Lin).
-    for _ in range(rondas_reparacion):
-        vecinos = [mejor_mask ^ (1 << u) for u in range(V)]
-        val, mask = evaluar(vecinos)
+    # ── Reparación 1-opt: mover un vértice de lado a la vez (Kernighan-Lin) ──
+    #
+    # La primera ronda explora los vecinos de **todas** las candidatas, no sólo los
+    # de la ganadora. Medido sobre N5B: de las 5 instancias donde la búsqueda no
+    # alcanzaba el mínimo del oráculo, en 3 el óptimo era vecino de una candidata
+    # que no había ganado el re-scoring — así que mirando sólo a la ganadora nunca
+    # se visitaba. Son V·|candidatas| máscaras extra en un único batch, y con
+    # |candidatas| = 2V eso es O(V²): despreciable frente al O(V²) de consultas que
+    # la búsqueda ya paga.
+    vecinos = [m ^ (1 << u) for m in dict.fromkeys(candidatas) for u in range(V)]
+    val, mask = evaluar(vecinos)
+    if val < mejor_val:
+        mejor_val, mejor_mask = val, mask
+
+    # Rondas siguientes: escalada local desde la ganadora hasta que no mejore.
+    for _ in range(max(rondas_reparacion - 1, 0)):
+        val, mask = evaluar([mejor_mask ^ (1 << u) for u in range(V)])
         if val >= mejor_val:
             break
         mejor_val, mejor_mask = val, mask

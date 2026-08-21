@@ -1,5 +1,22 @@
 # QSW — Stoer-Wagner × Queyranne
 
+| Término | Qué es |
+|---|---|
+| MAO | Maximum Adjacency Ordering. El corazón de Stoer-Wagner: va agregando el nodo más "pegado" a los ya elegidos. Los dos últimos son el par colgante y dan una candidata de corte. Son los 2.8 ms. |
+| Zeta | El precómputo: suma sobre subconjuntos. Deja `sumas[i,m]` lista para cualquier máscara m. Es el 100 % del costo. |
+| butterfly / mariposa | El patrón de acceso del Zeta: D pasadas; en la pasada d se suman pares separados 2^d. |
+| DRAM | La RAM normal. ~200–273 GB/s. |
+| HBM | La memoria de la GPU. ~1 TB/s — de ahí la ventaja. |
+| PCIe | El cable/bus que une la GPU con la CPU. Todo lo que entra o sale de la GPU pasa por ahí, a ~12–25 GB/s. Es el peaje. |
+| H2D / D2H | Host to Device / Device to Host: las copias CPU→GPU y GPU→CPU por PCIe. |
+| bandwidth-bound | El programa espera datos, no hace cuentas. Agregar cores no ayuda si el bus ya está lleno. Es el caso del Zeta. |
+| SIMT | En la GPU, grupos de 32 threads (warp) ejecutan la misma instrucción a la vez. Si se desvían, se serializan. |
+| fork / spawn | Dos formas de crear procesos: fork clona el proceso actual (macOS acá); spawn arranca un Python nuevo de cero (Linux/el cluster). |
+| RawArray | Memoria que varios procesos ven a la vez, sin copiar. Lo que usa `qsw_mul`. |
+| Amdahl | La parte que queda serial pone un techo al speedup, por más cores que agregues. |
+| oráculo | La función `f(S)` que da el costo de un corte S. |
+
+
 Híbrido entre el andamiaje de **Stoer-Wagner** (JACM 1997) y el oráculo Zeta exacto de
 **Queyranne** (Math. Prog. 1998) que ya usa `qn`.
 

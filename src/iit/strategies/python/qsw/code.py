@@ -83,8 +83,8 @@ class QSW(SIA, nombre="qsw"):
     }
 
     backend: str = "python"
-    modo: str = "estatico"
-    k: str = "auto"  # usable en modo=estocastico
+    modo: str = "exacto"
+    k: str = "auto"  # uso en modo=estocastico
 
     @classmethod
     def preflight(cls, opciones: dict[str, str] | None = None) -> None:

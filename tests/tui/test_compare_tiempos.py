@@ -100,8 +100,32 @@ class TestTabla:
         etiquetas = list(build_rich_table_tiempos(r).columns[0]._cells)
         assert etiquetas == [
             "n", "max", "bigote ↑", "Q3", "media", "mediana", "Q1",
-            "bigote ↓", "min", "atípicos", "total", "vs mejor",
+            "bigote ↓", "min", "atípicos", "total",
+            "más lento (mediana)", "más lento (total)",
         ]
+
+    def test_la_razon_va_en_la_columna_de_la_lenta_no_de_la_mejor(self):
+        """Un `4.00x` en la columna de `lenta` significa que `lenta` tarda 4 veces
+        más — no que haya ganado 4x. La mejor lleva `—`."""
+        r = times_summary(_merged(rapida=[1, 1, 1], lenta=[4, 4, 4]),
+                            ["rapida", "lenta"])
+        tabla = build_rich_table_tiempos(r)
+        etiquetas = list(tabla.columns[0]._cells)
+        fila = etiquetas.index("más lento (mediana)")
+        assert [c.header for c in tabla.columns] == ["", "rapida", "lenta"]
+        assert tabla.columns[1]._cells[fila] == "—"        # rapida es la mejor
+        assert tabla.columns[2]._cells[fila] == "4.00x"    # lenta tarda 4 veces más
+
+    def test_el_guion_del_total_va_a_quien_gana_el_total(self):
+        """Mediana y total pueden tener ganadores distintos; cada fila marca el suyo."""
+        r = times_summary(_merged(a=[1, 1, 1, 100], b=[9, 9, 9, 9]), ["a", "b"])
+        tabla = build_rich_table_tiempos(r)
+        etiquetas = list(tabla.columns[0]._cells)
+        f_med = etiquetas.index("más lento (mediana)")
+        f_tot = etiquetas.index("más lento (total)")
+        assert [c.header for c in tabla.columns] == ["", "a", "b"]  # a gana la mediana
+        assert tabla.columns[1]._cells[f_med] == "—"    # a: mejor mediana
+        assert tabla.columns[2]._cells[f_tot] == "—"    # b: mejor total
 
     def test_las_filas_van_de_mayor_a_menor_como_un_boxplot(self):
         r = times_summary(_merged(a=range(1, 10)), ["a"])
