@@ -66,9 +66,15 @@ class SIA(ABC):
         for attr, valor in validadas.items():
             admisibles = cls.opciones.get(attr)
             if admisibles is None:
+                if not cls.opciones:
+                    raise ValueError(
+                        f"La estrategia '{cls.nombre}' no tiene opciones "
+                        f"configurables, y se le pasó {attr!r}. Las opciones son "
+                        f"por estrategia: quitála o usá una que la declare."
+                    )
                 raise ValueError(
                     f"'{cls.nombre}' no admite la opción {attr!r}. "
-                    f"Disponibles: {sorted(cls.opciones) or 'ninguna'}"
+                    f"Admite: {', '.join(sorted(cls.opciones))}"
                 )
             if valor not in admisibles:
                 raise ValueError(

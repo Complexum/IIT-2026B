@@ -1,7 +1,12 @@
 """Comando: edit execution <nombre> [--dataset ...] [--patron ...] [--estrategia ...]."""
 
-from src.cli.utils import error, info, parse_kv, success
-from src.tui.run.helpers import cargar_programa, guardar_programa, listar_programas
+from src.cli.utils import error, info, parse_kv, success, warn
+from src.tui.run.helpers import (
+    cargar_programa,
+    guardar_programa,
+    listar_programas,
+    podar_opciones,
+)
 
 
 def handle(args) -> None:
@@ -24,6 +29,15 @@ def handle(args) -> None:
         prog.patron = args.patron
         changed = True
     if args.estrategia is not None:
+        if prog.estrategia != args.estrategia and prog.opciones:
+            # Las opciones son por estrategia (`SIA.opciones`); las de la anterior
+            # no aplican y harían fallar la nueva al ejecutar.
+            prog.opciones, descartadas = podar_opciones(args.estrategia, prog.opciones)
+            if descartadas:
+                warn(
+                    f"Descartadas opciones que '{args.estrategia}' no admite: "
+                    + ", ".join(f"{k}={v}" for k, v in sorted(descartadas.items()))
+                )
         prog.estrategia = args.estrategia
         changed = True
     if args.opcion:

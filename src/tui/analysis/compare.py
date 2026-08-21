@@ -167,6 +167,156 @@ def compare_group_n(names: list[str], tol: float) -> dict:
     return {"merged": merged, "strategies": strategies, "pairs": pairs}
 
 
+def times_summary(merged: pl.DataFrame, strategies: list[str]) -> dict[str, dict]:
+    """Resumen de cinco números (+ bigotes y media) del tiempo de cada estrategia.
+
+    `compare_group_n` responde *si dos estrategias coinciden*; esto responde
+    **cuál conviene**. Un promedio solo no alcanza: los barridos mezclan
+    combinaciones con D chico y D grande, así que la distribución es asimétrica y
+    la media queda arrastrada por la cola. La mediana y los cuartiles dicen qué
+    pasa en el caso típico, y los bigotes dónde están los casos malos.
+
+    Bigotes al estilo Tukey: el dato más extremo que todavía cae dentro de
+    `Q1 − 1.5·IQR` / `Q3 + 1.5·IQR`. Se reporta el dato real y no la cota, que es
+    lo que dibuja un boxplot; lo que queda afuera se cuenta como atípico.
+    """
+    resumen: dict[str, dict] = {}
+    for estrategia in strategies:
+        col = f"{estrategia}_t"
+        if col not in merged.columns:
+            continue
+        serie = merged[col].drop_nulls().drop_nans().sort()
+        if serie.is_empty():
+            continue
+
+        q1 = float(serie.quantile(0.25, interpolation="linear"))
+        q3 = float(serie.quantile(0.75, interpolation="linear"))
+        iqr = q3 - q1
+        cota_inf, cota_sup = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+
+        dentro = serie.filter((serie >= cota_inf) & (serie <= cota_sup))
+        # Si el IQR es 0 (todas iguales) `dentro` puede quedar vacío: caer al dato.
+        bigote_inf = float(dentro.min()) if not dentro.is_empty() else float(serie.min())
+        bigote_sup = float(dentro.max()) if not dentro.is_empty() else float(serie.max())
+
+        resumen[estrategia] = {
+            "n": len(serie),
+            "min": float(serie.min()),
+            "bigote_inf": bigote_inf,
+            "q1": q1,
+            "mediana": float(serie.median()),
+            "media": float(serie.mean()),
+            "q3": q3,
+            "bigote_sup": bigote_sup,
+            "max": float(serie.max()),
+            "atipicos": int(len(serie) - len(dentro)),
+            "total": float(serie.sum()),
+        }
+    return resumen
+
+
+def build_rich_table_tiempos(resumen: dict[str, dict]) -> Table:
+    """Resumen de tiempos, una columna por estrategia y la mejor primero.
+
+    Va transpuesta (métricas en filas) a propósito: con 12 métricas y el formato
+    normal la tabla pasa de 120 caracteres y la terminal la trunca justo en las
+    columnas que importan. Así entra en 80 y además se compara leyendo a lo largo
+    de una fila, que es la pregunta real ("¿cuál conviene?").
+
+    En ms: `tiempo_wall_s` da valores del orden de 1e-3 y en segundos la tabla
+    queda llena de ceros.
+    """
+    orden = sorted(resumen.items(), key=lambda kv: kv[1]["mediana"])
+
+    tabla = Table(
+        show_header=True,
+        header_style="bold cyan",
+        show_lines=False,
+        box=rich_box.SIMPLE,
+        padding=(0, 1),
+        title="tiempo por combinación (ms)",
+        title_style="bold",
+    )
+    tabla.add_column("", no_wrap=True, style="bold")
+    for i, (estrategia, _) in enumerate(orden):
+        tabla.add_column(
+            estrategia, justify="right", no_wrap=True,
+            style="green" if i == 0 else "",
+        )
+
+    if not orden:
+        return tabla
+
+    filas = [
+        ("n", "n", None),
+        ("max", "max", "ms"),
+        ("bigote ↑", "bigote_sup", "ms"),
+        ("Q3", "q3", "ms"),
+        ("media", "media", "ms"),
+        ("mediana", "mediana", "ms"),
+        ("Q1", "q1", "ms"),
+        ("bigote ↓", "bigote_inf", "ms"),
+        ("min", "min", "ms"),
+        ("atípicos", "atipicos", None),
+        ("total", "total", "ms"),
+    ]
+    # Orden de arriba hacia abajo como se dibuja un boxplot: max arriba, min abajo.
+    for etiqueta, clave, unidad in filas:
+        tabla.add_row(
+            etiqueta,
+            *(
+                f"{s[clave] * 1e3:.3f}" if unidad == "ms" else str(s[clave])
+                for _, s in orden
+            ),
+        )
+
+    mejor = orden[0][1]["mediana"]
+    tabla.add_row(
+        "vs mejor",
+        *(
+            "—" if i == 0
+            else (f"{s['mediana'] / mejor:.2f}x" if mejor > 0 else "—")
+            for i, (_, s) in enumerate(orden)
+        ),
+    )
+    return tabla
+
+
+def stamps_veredict(resumen: dict[str, dict]) -> str:
+    """Una línea de conclusión: quién gana, por mediana y por tiempo total.
+
+    Los dos números se reportan siempre, incluso cuando gana la misma estrategia,
+    porque la brecha entre ellos *es* el dato. Sobre N15A/patron-2, `qsw` va 1.49x
+    por mediana y 2.15x por total: la ventaja no está en la combinación típica sino
+    en las caras, que es justo lo que un promedio solo escondería. Cuando además
+    los ganadores difieren, una estrategia gana en el caso común y la otra en la
+    cola — y eso hay que decirlo, no promediarlo.
+    """
+    if len(resumen) < 2:
+        return ""
+
+    def _factor(clave: str) -> tuple[str, float]:
+        orden = sorted(resumen.items(), key=lambda kv: kv[1][clave])
+        mejor, segunda = orden[0], orden[1]
+        razon = segunda[1][clave] / mejor[1][clave] if mejor[1][clave] > 0 else 1.0
+        return mejor[0], razon
+
+    gana_mediana, f_mediana = _factor("mediana")
+    gana_total, f_total = _factor("total")
+
+    if gana_mediana == gana_total:
+        return (
+            f"Más rápida: [green]{gana_mediana}[/green] — "
+            f"{f_mediana:.2f}x por mediana, {f_total:.2f}x por tiempo total "
+            f"(sobre la siguiente)"
+        )
+    return (
+        f"Mediana: gana [green]{gana_mediana}[/green] ({f_mediana:.2f}x) · "
+        f"total: gana [green]{gana_total}[/green] ({f_total:.2f}x) — "
+        f"una es mejor en el caso típico y la otra en la cola"
+    )
+
+
 def build_rich_table_n(pairs: dict, strategies: list[str], tol: float) -> Table:
     """Tabla Rich con stats pairwise para N estrategias."""
     tabla = Table(

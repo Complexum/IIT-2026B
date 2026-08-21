@@ -211,6 +211,23 @@ def cargar_programa(nombre: str) -> Programa:
             logging.warning(
                 f"Invalid strategy in program '{nombre}': '{estrategia_original}' reset to empty"
             )
+        cambio = True
+    else:
+        cambio = False
+
+    # Podar opciones que ya no aplican (típicamente porque cambió la estrategia).
+    if programa.opciones:
+        validas, descartadas = podar_opciones(programa.estrategia, programa.opciones)
+        if descartadas:
+            logging.warning(
+                f"Program '{nombre}': descartadas opciones que "
+                f"'{programa.estrategia or 'sin estrategia'}' no admite: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(descartadas.items()))
+            )
+            programa.opciones = validas
+            cambio = True
+
+    if cambio:
         guardar_programa(programa)
 
     return programa
@@ -271,6 +288,40 @@ def validar_estrategia(estrategia: str, estrategias_disponibles: list[str]) -> s
 
     # Si no es válido ni migrable, retornar string vacío
     return ""
+
+
+def podar_opciones(
+    estrategia: str, opciones: dict[str, str] | None
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Descarta las opciones que la estrategia actual no declara.
+
+    Las opciones son **por estrategia** (`SIA.opciones`), pero se guardan en el
+    programa. Al cambiarle la estrategia a una ejecución, las de la anterior
+    quedaban pegadas y hacían fallar la nueva: un programa que fue `qsw` con
+    `backend=c` reventaba con *"'queyranne' no admite la opción 'backend'"* al
+    cambiarlo a cualquier estrategia que no tenga esa opción.
+
+    Returns:
+        `(validas, descartadas)`.
+    """
+    opciones = dict(opciones or {})
+    if not opciones:
+        return {}, {}
+
+    from src.iit.strategies.python.sia import SIA
+    from src.iit.strategies.runner import importar_estrategias
+
+    importar_estrategias()
+    cls = SIA.registry.get(estrategia)
+    if cls is None:
+        return opciones, {}  # estrategia desconocida: que se queje quien ejecute
+
+    admisibles = cls.opciones
+    validas, descartadas = {}, {}
+    for attr, valor in opciones.items():
+        destino = validas if (attr in admisibles and valor in admisibles[attr]) else descartadas
+        destino[attr] = valor
+    return validas, descartadas
 
 
 def es_estrategia_mpi(estrategia: str) -> bool:

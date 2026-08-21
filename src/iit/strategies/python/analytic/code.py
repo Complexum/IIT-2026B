@@ -59,7 +59,7 @@ class Analytic(SIA, nombre="analytic"):
 
     def winner(self, sistema: System) -> tuple[tuple[int, ...], tuple[int, ...]]:
         D = len(sistema.dims)
-        N = len(sistema.ncubos)
+        # N = len(sistema.ncubos)
 
         # Ruta rápida: δ = H − p y Zeta en un solo paso, sin gather (ver zeta.py).
         sumas, pivot_flat = zeta_caras(sistema)

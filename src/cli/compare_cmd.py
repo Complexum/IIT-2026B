@@ -15,10 +15,13 @@ from src.cli.utils import console, error, info, success, warn
 from src.io.manager import listar_resultados
 from src.tui.analysis.compare import (
     build_rich_table_n,
+    build_rich_table_tiempos,
     compare_group_n,
     formatos_mezclados,
     group_selected,
     parse_result_key,
+    times_summary,
+    stamps_veredict,
 )
 
 OUTPUT_DIR = Path("data/output")
@@ -97,6 +100,14 @@ def handle(args) -> None:
             continue
         console.print(f"  Estrategias: {', '.join(res['strategies'])}")
         console.print(build_rich_table_n(res["pairs"], res["strategies"], tol))
+
+        # La tabla de arriba dice si coinciden; ésta, cuál conviene.
+        resumen = times_summary(res["merged"], res["strategies"])
+        if resumen:
+            console.print(build_rich_table_tiempos(resumen))
+            veredicto = stamps_veredict(resumen)
+            if veredicto:
+                console.print(f"  {veredicto}\n")
         hubo_comparacion = True
 
     if not hubo_comparacion:

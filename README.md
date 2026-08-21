@@ -149,6 +149,7 @@ Las estrategias viven en `src/iit/strategies/python/<nombre>/code.py` y se regis
 | `analytical`, `analytical_concurrent` | Variantes previas de la analítica |
 | `qn`, `qn_mul`, `qn_mpi`, `qn_cuda`, `queyranne` | Familia Queyranne y sus backends paralelos |
 | `qsw` | Queyranne × Stoer-Wagner: MAO con keys incrementales sobre el oráculo Zeta. Opciones `modo` (`exacto`/`estatico`/`estocastico`), `backend` (`python`/`c`) y `k` |
+| `qsw_mul`, `qsw_cuda` | Mismo algoritmo con el precómputo Zeta paralelizado (multiprocessing sobre las filas / kernel CUDA). Resultado idéntico a `qsw`; `qsw_mul` agrega la opción `workers` |
 | `force` | Fuerza bruta |
 | `phi` | pyphi como referencia (requiere la TPM completa) |
 

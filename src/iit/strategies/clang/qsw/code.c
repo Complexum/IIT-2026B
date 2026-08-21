@@ -34,15 +34,22 @@
  *   bloque = 2^d      elementos contiguos por mitad
  *   paso   = 2*bloque
  */
-static void zeta_dim(float *fila, size_t total, size_t bloque, int pivote_bit) {
+static void zeta_dim(float *fila, size_t total, size_t bloque, int pivote_bit)
+{
     const size_t paso = bloque << 1;
-    for (size_t base = 0; base < total; base += paso) {
+    for (size_t base = 0; base < total; base += paso)
+    {
         float *bajo = fila + base;
         float *alto = bajo + bloque;
-        if (pivote_bit) {
-            for (size_t i = 0; i < bloque; ++i) bajo[i] += alto[i];
-        } else {
-            for (size_t i = 0; i < bloque; ++i) alto[i] += bajo[i];
+        if (pivote_bit)
+        {
+            for (size_t i = 0; i < bloque; ++i)
+                bajo[i] += alto[i];
+        }
+        else
+        {
+            for (size_t i = 0; i < bloque; ++i)
+                alto[i] += bajo[i];
         }
     }
 }
@@ -53,22 +60,25 @@ static void zeta_dim(float *fila, size_t total, size_t bloque, int pivote_bit) {
  * flops pero sí divide a la mitad los barridos de memoria, que es el recurso
  * escaso. El orden importa: la última suma usa el cuadrante ya actualizado.
  */
-static void zeta_dim2(float *fila, size_t total, size_t bloque, int piv0, int piv1) {
+static void zeta_dim2(float *fila, size_t total, size_t bloque, int piv0, int piv1)
+{
     const size_t paso = bloque << 2;
-    for (size_t base = 0; base < total; base += paso) {
+    for (size_t base = 0; base < total; base += paso)
+    {
         /* Coordenadas LÓGICAS q[u_{d+1}][u_d]; en el arreglo (coordenadas delta)
          * el bit físico es u ^ pivote, de ahí los XOR en los offsets.
          * Layout dentro del grupo: (bit_{d+1} * 2 + bit_d) * bloque. */
-        float *q00 = fila + base + (size_t)((piv1      ) * 2 + (piv0      )) * bloque;
-        float *q01 = fila + base + (size_t)((piv1      ) * 2 + (piv0 ^ 1  )) * bloque;
-        float *q10 = fila + base + (size_t)((piv1 ^ 1  ) * 2 + (piv0      )) * bloque;
-        float *q11 = fila + base + (size_t)((piv1 ^ 1  ) * 2 + (piv0 ^ 1  )) * bloque;
-        for (size_t i = 0; i < bloque; ++i) {
+        float *q00 = fila + base + (size_t)((piv1) * 2 + (piv0)) * bloque;
+        float *q01 = fila + base + (size_t)((piv1) * 2 + (piv0 ^ 1)) * bloque;
+        float *q10 = fila + base + (size_t)((piv1 ^ 1) * 2 + (piv0)) * bloque;
+        float *q11 = fila + base + (size_t)((piv1 ^ 1) * 2 + (piv0 ^ 1)) * bloque;
+        for (size_t i = 0; i < bloque; ++i)
+        {
             const float a = q00[i];
-            q01[i] += a;        /* 1. Zeta dim d,   mitad u_{d+1}=0 */
-            q11[i] += q10[i];   /* 2. Zeta dim d,   mitad u_{d+1}=1 (antes de 3) */
-            q10[i] += a;        /* 3. Zeta dim d+1, u_d=0 */
-            q11[i] += q01[i];   /* 4. Zeta dim d+1, u_d=1 (usa q01 ya actualizado) */
+            q01[i] += a;      /* 1. Zeta dim d,   mitad u_{d+1}=0 */
+            q11[i] += q10[i]; /* 2. Zeta dim d,   mitad u_{d+1}=1 (antes de 3) */
+            q10[i] += a;      /* 3. Zeta dim d+1, u_d=0 */
+            q11[i] += q01[i]; /* 4. Zeta dim d+1, u_d=1 (usa q01 ya actualizado) */
         }
     }
 }
@@ -78,19 +88,25 @@ static void zeta_dim2(float *fila, size_t total, size_t bloque, int piv0, int pi
  * pivot_flat: índice plano del estado pivote (bit j = dims[j]).
  * Devuelve 0 en éxito, !=0 si los argumentos no son válidos.
  */
-int qsw_zeta(float *flat, int N, int D, uint64_t pivot_flat) {
-    if (!flat || N <= 0 || D < 0 || D > 62) return 1;
+int qsw_zeta(float *flat, int N, int D, uint64_t pivot_flat)
+{
+    if (!flat || N <= 0 || D < 0 || D > 62)
+        return 1;
 
     const size_t total = (size_t)1 << D;
-    for (int fila_idx = 0; fila_idx < N; ++fila_idx) {
+    for (int fila_idx = 0; fila_idx < N; ++fila_idx)
+    {
         float *fila = flat + (size_t)fila_idx * total;
         int d = 0;
-        for (; d + 1 < D; d += 2) {
-            zeta_dim2(fila, total, (size_t)1 << d,
-                      (int)((pivot_flat >> d) & 1),
-                      (int)((pivot_flat >> (d + 1)) & 1));
+        for (; d + 1 < D; d += 2)
+        {
+            zeta_dim2(
+                fila, total, (size_t)1 << d,
+                (int)((pivot_flat >> d) & 1),
+                (int)((pivot_flat >> (d + 1)) & 1));
         }
-        for (; d < D; ++d) {
+        for (; d < D; ++d)
+        {
             zeta_dim(fila, total, (size_t)1 << d, (int)((pivot_flat >> d) & 1));
         }
     }

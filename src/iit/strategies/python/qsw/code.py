@@ -66,7 +66,7 @@ from src.iit.strategies.python.qsw.muestreo import OraculoMuestreado
 from src.iit.strategies.python.qsw.core import (
     OraculoCache,
     generar_candidatas,
-    puntuar_candidatas,
+    # puntuar_candidatas,
     stoer_wagner_queyranne,
 )
 
@@ -77,14 +77,14 @@ class QSW(SIA, nombre="qsw"):
     #: Opciones configurables. El primer valor de cada tupla es el default.
     #: `ejecutar(..., opciones={"backend": "c"})` las setea tras validarlas.
     opciones = {
-        "modo": ("exacto", "estatico", "estocastico"),
         "backend": ("python", "c", "auto"),
+        "modo": ("exacto", "estatico", "estocastico"),
         "k": ("auto", "1024", "2048", "8192", "32768"),
     }
 
-    modo: str = "exacto"
     backend: str = "python"
-    k: str = "auto"          # sólo usado por modo=estocastico
+    modo: str = "estatico"
+    k: str = "auto"  # usable en modo=estocastico
 
     @classmethod
     def preflight(cls, opciones: dict[str, str] | None = None) -> None:
@@ -114,12 +114,22 @@ class QSW(SIA, nombre="qsw"):
             return self.__winner_estocastico(dims, indices, D, N, V)
         return self.__winner_zeta(dims, indices, D, N, V, modo=self.modo)
 
+    def _preparar_oraculo(self, sistema):
+        """Costura del precómputo Zeta — el 100 % del costo de la estrategia.
+
+        Medido, la búsqueda MAO son 2.8 ms contra 0.957 s del Zeta a n=22 (ver
+        ``QSW.md`` §6). Por eso las variantes paralelas (``qsw_mul``, ``qsw_cuda``)
+        sobrescriben **sólo esto**: heredan `resolver` / `winner` / el re-scoring sin
+        tocarlos, y la búsqueda les queda bit-idéntica por construcción.
+        """
+        # El backend elige el kernel del Zeta, que es donde está el costo real.
+        kernel = zeta_c if resolver_backend(self.backend) == "c" else None
+        return preparar_oraculo(sistema, kernel=kernel)
+
     def __winner_zeta(self, dims, indices, D, N, V, modo: str):
         """Ruta exacta: oráculo Zeta completo. También es el fallback del muestreo."""
         sistema = self.sistema
-        # El backend elige el kernel del Zeta, que es donde está el costo real.
-        kernel = zeta_c if resolver_backend(self.backend) == "c" else None
-        oraculo = preparar_oraculo(sistema, kernel=kernel)
+        oraculo = self._preparar_oraculo(sistema)
         mec_mask = (1 << D) - 1
         desplaz = np.arange(N, dtype=np.int64)
 
@@ -134,9 +144,7 @@ class QSW(SIA, nombre="qsw"):
             alc_bool = ((altos[:, None] >> desplaz) & 1).astype(bool)
             return f_cara_batch(oraculo, masks_mec, alc_bool)
 
-        valor, mask, self._oraculo_stats = stoer_wagner_queyranne(
-            V, f_batch, modo=modo
-        )
+        valor, mask, self._oraculo_stats = stoer_wagner_queyranne(V, f_batch, modo=modo)
 
         mecanismo = tuple(dims[j] for j in range(D) if (mask >> j) & 1)
         alcance = tuple(indices[i] for i in range(N) if (mask >> (D + i)) & 1)

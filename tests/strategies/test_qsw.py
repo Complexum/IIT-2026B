@@ -355,3 +355,50 @@ class TestMedicionDeTiempo:
         # Un conjunto homogéneo no dispara aviso, sea del formato que sea.
         assert formatos_mezclados(["no/existe/a", "no/existe/b"]) == []
         assert formato_nuevo("no/existe") is False
+
+
+class TestOpcionesPorEstrategia:
+    """Las opciones son de cada estrategia; al cambiarla, las viejas no aplican.
+
+    Un programa que fue `qsw` con `backend=c` y pasó a `queyranne` fallaba con
+    *"'queyranne' no admite la opción 'backend'"* — y como `backend` no lo declara
+    ninguna otra estrategia, rompía con cualquiera que se eligiera.
+    """
+
+    def test_poda_lo_que_la_nueva_estrategia_no_admite(self):
+        from src.tui.run.helpers import podar_opciones
+
+        validas, descartadas = podar_opciones("queyranne", {"backend": "c"})
+        assert validas == {}
+        assert descartadas == {"backend": "c"}
+
+    def test_conserva_lo_que_si_admite(self):
+        from src.tui.run.helpers import podar_opciones
+
+        validas, descartadas = podar_opciones(
+            "qsw", {"backend": "c", "modo": "estatico"}
+        )
+        assert validas == {"backend": "c", "modo": "estatico"}
+        assert descartadas == {}
+
+    def test_poda_valores_invalidos_aunque_el_atributo_exista(self):
+        from src.tui.run.helpers import podar_opciones
+
+        validas, descartadas = podar_opciones("qsw", {"backend": "rust"})
+        assert validas == {}
+        assert descartadas == {"backend": "rust"}
+
+    def test_estrategia_desconocida_no_poda(self):
+        """Que se queje quien ejecute, con su propio mensaje."""
+        from src.tui.run.helpers import podar_opciones
+
+        validas, _ = podar_opciones("no_existe", {"backend": "c"})
+        assert validas == {"backend": "c"}
+
+    def test_mensaje_util_cuando_no_hay_opciones(self):
+        from src.iit.strategies.python.sia import SIA
+        from src.iit.strategies.runner import importar_estrategias
+
+        importar_estrategias()
+        with pytest.raises(ValueError, match="no tiene opciones configurables"):
+            SIA.registry["queyranne"].validar_opciones({"backend": "python"})

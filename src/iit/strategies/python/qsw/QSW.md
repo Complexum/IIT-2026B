@@ -139,6 +139,24 @@ Corolario para las versiones paralelas: siendo bandwidth-bound, más hilos en la
 misma máquina compran poco (comparten DRAM). GPU (HBM ~1 TB/s) y MPI entre nodos
 —cada uno con su memoria— sí.
 
+**Medido** (`benchmarks/escalado_mul.py`, M4 Pro 12 cores, `qsw_mul`):
+
+| n | tamaño | serial | w=4 | w=8 | w=16 |
+|---|---:|---:|---:|---:|---:|
+| 16 | 4.2 MB | 0.0062 s | 0.58× | 0.40× | 0.34× |
+| 18 | 18.9 MB | 0.0289 s | 1.16× | 1.12× | 0.99× |
+| 20 | 83.9 MB | 0.1423 s | 1.61× | 1.94× | 1.99× |
+
+O sea: el corolario es **casi** correcto pero por el motivo equivocado. La curva se
+aplana en ~2×, sí, pero no por saturar la DRAM —a 29 GB/s efectivos se está en el
+11 % del pico del M4 Pro—. Pesan más el reparto por filas (N=20 sobre 16 workers
+deja rebanadas de 2 y de 1) y los 4 cores de eficiencia, que fijan el makespan.
+Debajo de ~80 MB la fila entera entra en L2 y la versión serial ya no toca DRAM,
+así que repartir sólo agrega overhead: de ahí el umbral `MIN_ELEMS_PARALELO`.
+
+En un EPYC 7302 —16 cores homogéneos, 8 canales DDR4— el reparto debería verse
+distinto; correr `escalado_mul.py` ahí es la medición que falta.
+
 ### Lo que sí se optimizó
 
 | Cambio | Ganancia medida |
@@ -214,9 +232,23 @@ uv run python benchmarks/calibrar_k.py 18 24 4
   sub-exponencial habría que muestrear del TPM mapeado (`cargar_mpt` ya usa
   `mmap` cuando existe el sidecar `.npy`).
 
-- **Paralelizar el Zeta** — las N filas son independientes. En CPU el techo es el
-  bus de memoria; en GPU (HBM) hay margen real. `qsw_zeta` está listo para
-  OpenMP sobre el bucle de filas.
+- ~~**Paralelizar el Zeta**~~ — hecho en la ruta Python: `qsw_mul`
+  (multiprocessing sobre las filas, memoria compartida vía `RawArray`) y
+  `qsw_cuda` (butterfly entero en un kernel CUDA). Los dos sobrescriben sólo
+  `QSW._preparar_oraculo`, así que heredan la búsqueda y dan resultado idéntico
+  —96/96 contra `qsw` sobre N20A—. Queda pendiente el lado C: `qsw_zeta` sigue
+  listo para `#pragma omp parallel for` sobre el bucle de filas, y sería la misma
+  paralelización sin IPC ni memoria compartida.
+
+- **`qsw_cuda` sin validar** — escrito contra el patrón de `analytic_cuda` y con
+  la aritmética de índices del kernel verificada en numpy contra `zeta_inplace`
+  (`tests/strategies/test_qsw_cuda.py`, todos los pivotes hasta D=8), pero nunca
+  ejecutado: no hay NVIDIA en la máquina de desarrollo.
+
+- **`analytic_cuda` casi no usa la GPU** — calcula `hyperfaces` en el host y sólo
+  manda la reducción por máscara, que ya era barata. Y la columna `gpu_mem_mb` del
+  CSV es 0.0 siempre: `pynvml` no es dependencia del proyecto, así que
+  `NVML_AVAILABLE` es False y nunca se puebla.
 
 - **`queyranne/code.py:111`** — su regla MAO usa `max f(A∪w)`; Queyranne exige
   `min f(A∪w) − f(w)`. Rompe la garantía de par colgante.

@@ -30,6 +30,7 @@ from src.io.manager import cargar_mpt, dims_de_red, preparar_ncubos
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
     etiqueta_estrategia,
+    podar_opciones,
     Programa,
     build_mpi_command,
     build_output_stem,
@@ -122,6 +123,18 @@ class ExecutionScreen(Widget):
             prog = cargar_programa(event.nombre)
             prog.dataset = event.dataset
             prog.patron = event.patron
+            if prog.estrategia != event.estrategia and prog.opciones:
+                # Las opciones son por estrategia: al cambiarla, las de la
+                # anterior dejan de aplicar y harían fallar la nueva.
+                prog.opciones, descartadas = podar_opciones(
+                    event.estrategia, prog.opciones
+                )
+                if descartadas:
+                    log.warn(
+                        f"Program '{event.nombre}': descartadas opciones que "
+                        f"'{event.estrategia}' no admite: "
+                        + ", ".join(f"{k}={v}" for k, v in sorted(descartadas.items()))
+                    )
             prog.estrategia = event.estrategia
             guardar_programa(prog)
         except Exception as e:
