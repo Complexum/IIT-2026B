@@ -33,12 +33,12 @@ Opciones (atributos, declarados en ``opciones`` y validados por
 el CLI con ``cli run execution X --opcion modo=estatico``):
 
 ``modo``
-  - ``exacto`` (default) — tras cada contracción recalcula con el oráculo la fila
-    del supernodo. Sin drift del surrogate.
-  - ``estatico`` — ``W[s] += W[t]`` de Stoer-Wagner puro. Cero consultas tras el
-    seed, así que las O(V²) evaluaciones caben en un único batch upfront (2 batches
-    totales vs 29) → paralelizable por completo. A cambio el error de segundo orden
-    se acumula por contracción.
+  - ``estatico`` (default) — ``W[s] += W[t]`` de Stoer-Wagner puro. Cero consultas
+    tras el seed, así que las O(V²) evaluaciones caben en un único batch upfront
+    (2 batches totales vs 29) → paralelizable por completo. A cambio el error de
+    segundo orden se acumula por contracción.
+  - ``exacto`` — tras cada contracción recalcula con el oráculo la fila del
+    supernodo. Sin drift del surrogate.
 
 ``backend``
   - ``python`` (default) — la ruta numpy de ``core.py``.
@@ -78,7 +78,7 @@ class QSW(SIA, nombre="qsw"):
     #: `ejecutar(..., opciones={"backend": "c"})` las setea tras validarlas.
     opciones = {
         "backend": ("python", "c", "auto"),
-        "modo": ("exacto", "estatico", "estocastico"),
+        "modo": ("estatico", "exacto", "estocastico"),
         "k": ("auto", "1024", "2048", "8192", "32768"),
     }
 

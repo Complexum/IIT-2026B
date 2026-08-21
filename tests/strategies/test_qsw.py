@@ -213,7 +213,7 @@ class TestOpciones:
     def test_defaults(self):
         from src.iit.strategies.python.qsw.code import QSW
 
-        assert QSW.defaults() == {"modo": "exacto", "backend": "python", "k": "auto"}
+        assert QSW.defaults() == {"modo": "estatico", "backend": "python", "k": "auto"}
 
     @pytest.mark.parametrize(
         "opciones, mensaje",
@@ -250,8 +250,8 @@ class TestOpciones:
         from src.tui.run.helpers import etiqueta_estrategia
 
         assert etiqueta_estrategia("qsw", None) == "qsw"
-        assert etiqueta_estrategia("qsw", {"modo": "exacto"}) == "qsw"
-        assert etiqueta_estrategia("qsw", {"modo": "estatico"}) == "qsw+modo=estatico"
+        assert etiqueta_estrategia("qsw", {"modo": "estatico"}) == "qsw"
+        assert etiqueta_estrategia("qsw", {"modo": "exacto"}) == "qsw+modo=exacto"
 
 
 class TestMuestreo:

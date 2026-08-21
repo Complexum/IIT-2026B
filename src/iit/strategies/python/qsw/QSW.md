@@ -23,7 +23,7 @@ Híbrido entre el andamiaje de **Stoer-Wagner** (JACM 1997) y el oráculo Zeta e
 Una sola estrategia registrada, `qsw`, con dos atributos configurables declarados en
 `QSW.opciones` (ver `SIA.opciones` y el README):
 
-- `modo`: `exacto` (default) | `estatico` | `estocastico` — ver §7
+- `modo`: `estatico` (default) | `exacto` | `estocastico` — ver §7
 - `backend`: `python` (default) | `c` | `auto` — el kernel C hace el **Zeta**, no el MAO
 - `k`: `auto` (default) | un entero — sólo lo usa `modo=estocastico`
 
@@ -100,8 +100,8 @@ aproximada esa suma deja de serlo y el error se acumula a lo largo de las V cont
 
 | modo | tras contraer | consultas | forma |
 |---|---|---|---|
-| `modo=estatico` | `W[s] += W[t]` (Stoer-Wagner puro) | O(V²), **1 batch upfront** | 100 % paralelizable (multiproc / CUDA / kernel C) |
-| `modo=exacto` (default) | recalcula sólo la fila del supernodo: `W[st][v] = (f(st) + f(v) − f(st ∪ v))/2` | O(V²), en O(V) batches | sin drift |
+| `modo=estatico` (default) | `W[s] += W[t]` (Stoer-Wagner puro) | O(V²), **1 batch upfront** | 100 % paralelizable (multiproc / CUDA / kernel C) |
+| `modo=exacto` | recalcula sólo la fila del supernodo: `W[st][v] = (f(st) + f(v) − f(st ∪ v))/2` | O(V²), en O(V) batches | sin drift |
 
 Mismo orden las dos: sólo nace **un** supernodo por fase, así que refrescar su fila cuesta `V_p`
 consultas y `Σ V_p = O(V²)`.

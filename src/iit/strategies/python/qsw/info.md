@@ -87,8 +87,8 @@ Dos modos de contracción (`modo=`):
 
 | modo               | tras contraer                                  | batches      | trade-off                                                         |
 | ------------------ | ---------------------------------------------- | ------------ | ----------------------------------------------------------------- |
-| `exacto` (default) | recalcula la fila del supernodo con el oráculo | $O(V)$ (≈29) | sin drift                                                         |
-| `estatico`         | `W[s] += W[t]` (SW puro)                       | 1            | 100 % paralelizable; el error de orden se acumula por contracción |
+| `estatico` (default) | `W[s] += W[t]` (SW puro)                       | 1            | 100 % paralelizable; el error de orden se acumula por contracción |
+| `exacto`             | recalcula la fila del supernodo con el oráculo | $O(V)$ (≈29) | sin drift                                                         |
 
 ## 7. Las optimizaciones, una por una
 
