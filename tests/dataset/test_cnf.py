@@ -78,6 +78,7 @@ class TestIdaYVuelta:
             cnf.desde_tabla(np.array([0.0, 0.5]), (0,))
 
     def test_formatear_es_legible(self):
-        assert cnf.formatear(RED[3], ["A", "B", "C"]) == "(A ∨ B) ∧ (¬A ∨ ¬B)"
+        assert cnf.formatear(RED[3], ["A", "B", "C"]) == "⟨A + B⟩⟨¬A + ¬B⟩"
+        assert cnf.formatear(RED[2], ["A", "B", "C"]) == "AC"  # cláusulas unitarias
         assert cnf.formatear([], None) == "1"
         assert cnf.formatear([[]], None) == "0"
