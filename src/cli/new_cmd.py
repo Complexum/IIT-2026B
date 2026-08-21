@@ -54,6 +54,14 @@ def handle(args) -> None:
             if args.estrategia not in listar_estrategias():
                 warn(f"Estrategia '{args.estrategia}' no reconocida.")
             prog.estrategia = args.estrategia
+        if getattr(args, "opcion", None):
+            from src.cli.utils import parse_kv
+
+            try:
+                prog.opciones = parse_kv(args.opcion)
+            except ValueError as e:
+                error(str(e))
+                return
 
         guardar_programa(prog)
         success(f"Execution '{name}' creado.")

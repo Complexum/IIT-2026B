@@ -81,9 +81,13 @@ Opera todo el flujo desde la terminal, sin TUI.
 | `edit` | Modificar un execution | `cli edit execution program-01 --estrategia phi` |
 | `run` | Ejecutar un execution | `cli run execution program-01` |
 | `results` | Consultar resultados con SQL | `cli results program-01 "SELECT estado, perdida FROM self LIMIT 10"` |
+| `compare` | Comparar resultados de varias estrategias (`--plot` genera las gráficas) | `cli compare program-01 program-02 --plot` |
 | `delete` | Eliminar un recurso | `cli delete execution program-01` |
 
 Flag global: `-v, --verbose` (en `run` muestra cada combinación resuelta).
+
+`new`, `edit` y `run` aceptan `--opcion ATTR=VALOR` (repetible) para configurar los atributos
+que la estrategia declare en `SIA.opciones` — ver [Opciones de estrategia](#opciones-de-estrategia).
 
 Flujo completo:
 
@@ -97,15 +101,24 @@ cli show execution exec-x
 cli run execution exec-x               # reanuda desde el checkpoint si existe
 cli run execution exec-x --no-resume   # reinicia desde cero
 
-# 3. Consultar resultados
+# 3. Consultar y comparar resultados
 cli results exec-x
 cli results exec-x "SELECT estado, perdida, tiempo FROM self WHERE perdida > 0.5 ORDER BY tiempo DESC LIMIT 10"
 cli results exec-x "SELECT estado, COUNT(*) AS total, AVG(perdida) FROM self GROUP BY estado"
 
-# 4. Limpiar
+# 4. Comparar contra otra estrategia y graficar
+cli compare exec-x exec-y                     # tabla: n_ok/n, %, max_diff, mean_diff
+cli compare exec-x exec-y --plot --ref analytic  # + página HTML interactiva (plotly)
+cli compare --all --dataset N15A --plot       # agrupa por (dataset, patrón)
+cli compare exec-x exec-y --paper             # figuras matplotlib en src/pics/
+
+# 5. Limpiar
 cli list executions
 cli delete execution exec-x
 ```
+
+`compare` sólo enfrenta resultados del mismo `(dataset, patrón)`; los agrupa solo. Flags:
+`--tol` (default `1e-4`), `--ref <estrategia>`, `--plot`, `--paper`, `--no-open`.
 
 CLI y TUI comparten la misma capa de persistencia (JSON en `data/input/`, CSV en `data/output/`), así que se pueden alternar libremente.
 
@@ -120,10 +133,38 @@ Las estrategias viven en `src/iit/strategies/python/<nombre>/code.py` y se regis
 | `analytic`, `analytic_concurrent`, `analytic_mul`, `analytic_mpi`, `analytic_cuda` | Solución analítica y sus backends paralelos (threads, multiprocessing, MPI, CUDA) |
 | `analytical`, `analytical_concurrent` | Variantes previas de la analítica |
 | `qn`, `qn_mul`, `qn_mpi`, `qn_cuda`, `queyranne` | Familia Queyranne y sus backends paralelos |
+| `qsw` | Queyranne × Stoer-Wagner: MAO con keys incrementales sobre el oráculo Zeta. Opciones `modo` y `backend` |
 | `force` | Fuerza bruta |
 | `phi` | pyphi como referencia (requiere la TPM completa) |
 
 `cli list strategies` imprime el listado vigente junto con cuáles necesitan la TPM completa.
+
+### Opciones de estrategia
+
+Una estrategia puede declarar atributos configurables sin crear una carpeta por variante:
+
+```python
+class MiEstrategia(SIA, nombre="mi_algoritmo"):
+    opciones = {"modo": ("rapido", "preciso"), "backend": ("python", "c")}
+    modo: str = "rapido"       # el primer valor de cada tupla es el default
+    backend: str = "python"
+```
+
+Se setean por CLI, y `SIA.validar_opciones` las rechaza **antes de arrancar** si el atributo no
+está declarado o el valor no es admisible:
+
+```bash
+cli edit execution exec-x --opcion modo=preciso
+cli run  execution exec-x --opcion backend=c     # override puntual
+cli edit execution exec-x --opcion modo=          # borrar una opción
+```
+
+Las opciones que difieren del default entran en el nombre del CSV
+(`N15A--qsw+modo=estatico--patron-2.csv`), así que dos corridas de la misma estrategia con
+opciones distintas quedan como series separadas en `cli compare` y en las gráficas.
+
+> Selección desde el tab Execution de la TUI: pendiente. Hoy las opciones se configuran por CLI y
+> quedan persistidas en el JSON del execution, listas para que la UI las lea.
 
 ### Crear una estrategia
 

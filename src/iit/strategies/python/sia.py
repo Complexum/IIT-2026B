@@ -34,6 +34,12 @@ class SIA(ABC):
     registry: ClassVar[dict[str, type["SIA"]]] = {}
     necesita_mpt: ClassVar[dict[str, bool]] = {}
 
+    #: Opciones configurables de la estrategia: ``{atributo: (valor, ...)}``.
+    #: El primer valor de cada tupla es el default. La TUI renderiza un selector
+    #: por opción y el CLI las acepta con ``--opcion attr=valor``; ``aplicar_opciones``
+    #: las valida antes de asignarlas. Vacío = la estrategia no es configurable.
+    opciones: ClassVar[dict[str, tuple[str, ...]]] = {}
+
     def __init_subclass__(
         cls, nombre: str = "", necesita_mpt: bool = False, **kw
     ) -> None:
@@ -42,6 +48,39 @@ class SIA(ABC):
             cls.nombre = nombre
             SIA.registry[nombre] = cls
             SIA.necesita_mpt[nombre] = necesita_mpt
+
+    @classmethod
+    def defaults(cls) -> dict[str, str]:
+        """Valor por defecto de cada opción (el primero de cada tupla)."""
+        return {attr: valores[0] for attr, valores in cls.opciones.items()}
+
+    @classmethod
+    def validar_opciones(cls, opciones: dict[str, str] | None) -> dict[str, str]:
+        """Valida opciones **sin instanciar** — sirve para fallar antes de arrancar.
+
+        Lanza si el atributo no está declarado o el valor no es admisible: una
+        opción mal escrita debe fallar, no ejecutarse en silencio con el default
+        (el resultado quedaría etiquetado como algo que no corrió).
+        """
+        validadas = dict(opciones or {})
+        for attr, valor in validadas.items():
+            admisibles = cls.opciones.get(attr)
+            if admisibles is None:
+                raise ValueError(
+                    f"'{cls.nombre}' no admite la opción {attr!r}. "
+                    f"Disponibles: {sorted(cls.opciones) or 'ninguna'}"
+                )
+            if valor not in admisibles:
+                raise ValueError(
+                    f"{attr}={valor!r} inválido para '{cls.nombre}'. "
+                    f"Valores: {', '.join(admisibles)}"
+                )
+        return validadas
+
+    def aplicar_opciones(self, opciones: dict[str, str] | None) -> None:
+        """Valida y asigna las opciones sobre esta instancia."""
+        for attr, valor in type(self).validar_opciones(opciones).items():
+            setattr(self, attr, valor)
 
     def __init__(self, subsistema: System) -> None:
         self.sistema: System = subsistema

@@ -1,8 +1,9 @@
-"""Núcleo SWQ: Stoer-Wagner × Queyranne sobre una función simétrica arbitraria.
+"""Núcleo QSW: Stoer-Wagner × Queyranne sobre una función simétrica arbitraria.
 
-Sin dependencias de SIA/System — recibe ``V`` y un oráculo batch ``f_batch`` y
-devuelve ``(mejor_valor, mejor_mascara)``. Testeable en aislamiento (ver
-``tests/strategies/test_swq.py``, que lo alimenta con la función de corte de un
+Sólo el algoritmo: sin dependencias de SIA/System y sin nada de backends (eso vive
+en ``backend.py``). Recibe ``V`` y un oráculo batch ``f_batch`` y devuelve
+``(mejor_valor, mejor_mascara)``. Testeable en aislamiento (ver
+``tests/strategies/test_qsw.py``, que lo alimenta con la función de corte de un
 grafo real para validar el puente matemático).
 
 Puente SW ↔ Queyranne
@@ -173,7 +174,23 @@ def stoer_wagner_queyranne(
         f_super = f_super[keep]
         miembros = [miembros[v] for v in keep]
 
-    # ── Re-scoring exacto: el surrogate guió, la f real decide ───────────────
+    mejor_val, mejor_mask = puntuar_candidatas(V, f, candidatas, rondas_reparacion)
+    return mejor_val, mejor_mask, f
+
+
+def puntuar_candidatas(
+    V: int,
+    f: OraculoCache,
+    candidatas: list[int],
+    rondas_reparacion: int = 2,
+) -> tuple[float, int]:
+    """Re-scoring exacto + reparación 1-opt. El surrogate guió, la ``f`` real decide.
+
+    Compartido por la ruta Python y la ruta C: el kernel C sólo **busca** y devuelve
+    candidatas; la decisión final siempre se toma acá con la ``f`` exacta.
+    """
+    full = (1 << V) - 1
+
     def evaluar(masks: list[int]) -> tuple[float, int]:
         validas = [m for m in dict.fromkeys(masks) if m != 0 and m != full]
         if not validas:
@@ -184,7 +201,7 @@ def stoer_wagner_queyranne(
 
     mejor_val, mejor_mask = evaluar(candidatas)
 
-    # ── Reparación 1-opt: mover un vértice de lado a la vez ─────────────────
+    # Reparación 1-opt: mover un vértice de lado a la vez (Kernighan-Lin).
     for _ in range(rondas_reparacion):
         vecinos = [mejor_mask ^ (1 << u) for u in range(V)]
         val, mask = evaluar(vecinos)
@@ -192,4 +209,4 @@ def stoer_wagner_queyranne(
             break
         mejor_val, mejor_mask = val, mask
 
-    return mejor_val, mejor_mask, f
+    return mejor_val, mejor_mask

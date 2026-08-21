@@ -45,9 +45,9 @@ def handle(args) -> None:
         info(f"  Mecanismos:  {patron.mecanismos}")
 
     elif resource == "strategy":
-        from src.iit.strategies.runner import __importar_estrategias
+        from src.iit.strategies.runner import importar_estrategias
 
-        __importar_estrategias()
+        importar_estrategias()
         if name not in SIA.registry:
             error(f"Estrategia '{name}' no encontrada.")
             return

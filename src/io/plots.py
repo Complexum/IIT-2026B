@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
-from src.paper.loader import load_all_groups
+from src.io.loader import load_all_groups
 
 PICS_DIR = Path("src/pics")
 _COLORS = [

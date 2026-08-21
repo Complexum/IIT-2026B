@@ -9,7 +9,7 @@ import json
 import logging
 import re
 import shlex
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 PROGRAMAS_DIR = Path("data/input/programas")
@@ -37,9 +37,35 @@ class Programa:
     progreso: float = 0.0
     n_procs: int = 4
     exec_template: str = DEFAULT_MPI_TEMPLATE
+    #: Opciones de la estrategia, ``{atributo: valor}`` (ver ``SIA.opciones``).
+    #: Se validan al ejecutar. Los JSON viejos sin la clave usan {} por defecto.
+    opciones: dict[str, str] = field(default_factory=dict)
 
 
 # ── Sidecar metadata (checkpoint invalidation) ───────────
+
+
+def etiqueta_estrategia(estrategia: str, opciones: dict[str, str] | None) -> str:
+    """``'qsw'`` + ``{'modo': 'estatico'}`` → ``'qsw+modo=estatico'``.
+
+    Sólo se anexan las opciones que difieren del default, así que las corridas
+    normales conservan el nombre de siempre. La etiqueta entra en el nombre del
+    CSV vía `build_output_stem`, de modo que dos corridas de la misma estrategia
+    con opciones distintas producen archivos distintos y `parse_result_key` las
+    trata como series separadas en las comparaciones y gráficas.
+    """
+    if not opciones:
+        return estrategia
+    try:
+        from src.iit.strategies.python.sia import SIA
+        from src.iit.strategies.runner import importar_estrategias
+
+        importar_estrategias()
+        defaults = SIA.registry[estrategia].defaults()
+    except Exception:
+        defaults = {}
+    extra = [f"{k}={v}" for k, v in sorted(opciones.items()) if defaults.get(k) != v]
+    return estrategia + ("+" + "+".join(extra) if extra else "")
 
 
 def build_output_stem(nombre: str, dataset: str, patron: str, estrategia: str) -> str:

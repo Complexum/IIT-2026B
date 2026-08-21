@@ -25,7 +25,7 @@ class Oraculo:
     pos_idx: dict[int, int] = field(default_factory=dict)  # índice de ncubo -> fila
 
 
-def gopreparar_oraculo(sistema: System) -> Oraculo:
+def preparar_oraculo(sistema: System) -> Oraculo:
     """Precomputa ``sumas[i, m]`` (Zeta sobre δ = H − p) y los mapas auxiliares."""
     dims = sistema.dims
     D = len(dims)

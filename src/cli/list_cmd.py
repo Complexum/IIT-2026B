@@ -51,9 +51,9 @@ def handle(args) -> None:
 
     elif resource == "strategies":
         # Importar estrategias para poblar el registro
-        from src.iit.strategies.runner import __importar_estrategias
+        from src.iit.strategies.runner import importar_estrategias
 
-        __importar_estrategias()
+        importar_estrategias()
         items = sorted(SIA.registry.keys())
         if not items:
             warn("No hay estrategias disponibles.")

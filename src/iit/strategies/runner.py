@@ -13,7 +13,7 @@ from src.io.manager import reducir_a_subsistema
 __STRATEGIES_DIR = Path("src/iit/strategies/python")
 
 
-def __importar_estrategias() -> None:
+def importar_estrategias() -> None:
     """Importa todos los code.py de estrategias para que disparen SIA.__init_subclass__."""
     if not __STRATEGIES_DIR.exists():
         return
@@ -31,9 +31,17 @@ def ejecutar(
     tpm: np.ndarray,
     params: Params,
     nombre_estrategia: str,
+    opciones: dict[str, str] | None = None,
 ) -> Solution:
-    """Construye el subsistema desde (tpm, params), aplica la estrategia y devuelve la Solution."""
-    __importar_estrategias()
+    """Construye el subsistema desde (tpm, params), aplica la estrategia y devuelve la Solution.
+
+    Args:
+        opciones: overrides de atributos declarados en ``cls.opciones`` (ej.
+            ``{"backend": "c", "modo": "estatico"}``). Se validan en
+            ``SIA.aplicar_opciones``; una opción desconocida o un valor inválido
+            lanzan en vez de caer al default.
+    """
+    importar_estrategias()
 
     if nombre_estrategia not in SIA.registry:
         disponibles = list(SIA.registry)
@@ -45,4 +53,6 @@ def ejecutar(
     needs_tpm = SIA.necesita_mpt.get(nombre_estrategia, False)
     subsistema = reducir_a_subsistema(tpm, params)
     kwargs = {"tpm": tpm, "params": params} if needs_tpm else {}
-    return cls(subsistema, **kwargs).resolver()
+    instancia = cls(subsistema, **kwargs)
+    instancia.aplicar_opciones(opciones)
+    return instancia.resolver()

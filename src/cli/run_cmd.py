@@ -4,14 +4,16 @@ import csv
 import time
 from pathlib import Path
 
-from src.cli.utils import console, error, info, success, warn
+from src.cli.utils import console, error, info, parse_kv, success, warn
 from src.iit.core.params import Params
-from src.iit.strategies.runner import ejecutar
+from src.iit.strategies.python.sia import SIA
+from src.iit.strategies.runner import ejecutar, importar_estrategias
 from src.infra.monitoring.resource_monitor import ResourceMonitor
 from src.io.manager import cargar_mpt
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
     build_output_stem,
+    etiqueta_estrategia,
     cargar_meta_programa,
     cargar_programa,
     guardar_meta_programa,
@@ -60,7 +62,29 @@ def handle(args) -> None:
         error("El patrón no genera combinaciones.")
         return
 
-    output_stem = build_output_stem(name, prog.dataset, prog.patron, prog.estrategia)
+    opciones = dict(prog.opciones or {})
+    if getattr(args, "opcion", None):
+        try:
+            opciones.update(parse_kv(args.opcion))
+        except ValueError as e:
+            error(str(e))
+            return
+
+    # Validar las opciones ANTES de arrancar: mejor fallar acá que en cada fila.
+    if opciones:
+        importar_estrategias()
+        try:
+            SIA.registry[prog.estrategia].validar_opciones(opciones)
+        except ValueError as e:
+            error(str(e))
+            return
+        info(f"Opciones: {', '.join(f'{k}={v}' for k, v in sorted(opciones.items()))}")
+
+    # La etiqueta mete las opciones no-default en el nombre del CSV, para que
+    # `qsw` y `qsw+modo=estatico` sean series distintas al comparar.
+    output_stem = build_output_stem(
+        name, prog.dataset, prog.patron, etiqueta_estrategia(prog.estrategia, opciones)
+    )
     output_path = OUTPUT_DIR / f"{output_stem}.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plataforma = build_plataforma()
@@ -71,6 +95,7 @@ def handle(args) -> None:
         "dataset": prog.dataset,
         "patron": prog.patron,
         "estrategia": prog.estrategia,
+        "opciones": opciones,
     }
     checkpoint_valido = bool(completados) and meta == params_actuales
     es_reanudacion = checkpoint_valido and not args.no_resume
@@ -122,7 +147,7 @@ def handle(args) -> None:
                     params = Params(estado, condicion, alcance, mecanismo)
                     monitor = ResourceMonitor()
                     monitor.start()
-                    sol = ejecutar(tpm, params, prog.estrategia)
+                    sol = ejecutar(tpm, params, prog.estrategia, opciones)
                     stats = monitor.stop()
                     writer.writerow(
                         [

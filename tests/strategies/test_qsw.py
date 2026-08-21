@@ -1,4 +1,4 @@
-"""Tests de la estrategia SWQ (Stoer-Wagner × Queyranne)."""
+"""Tests de la estrategia QSW (Stoer-Wagner × Queyranne)."""
 
 import numpy as np
 import pytest
@@ -134,22 +134,113 @@ class TestOraculo:
 
 
 class TestEstrategia:
-    @pytest.mark.parametrize("nombre", ["swq", "swq_static"])
-    def test_registrada_y_ejecutable(self, nombre):
+    @pytest.mark.parametrize("modo", ["exacto", "estatico"])
+    def test_registrada_y_ejecutable(self, modo):
         import math
 
         tpm = cargar_mpt(RED)
         n = tpm.shape[1]
-        sol = ejecutar(tpm, Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n), nombre)
+        sol = ejecutar(
+            tpm,
+            Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n),
+            "qsw",
+            opciones={"modo": modo},
+        )
         assert math.isfinite(sol.perdida)
         assert sol.perdida >= 0.0
         assert sol.particion != ""
 
     def test_no_peor_que_analytic_por_mucho(self):
-        """`analytic` es exacto: swq nunca debe quedar por debajo de él."""
+        """`analytic` es exacto: qsw nunca debe quedar por debajo de él."""
         tpm = cargar_mpt(RED)
         n = tpm.shape[1]
         params = Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n)
         ref = ejecutar(tpm, params, "analytic").perdida
-        got = ejecutar(tpm, params, "swq").perdida
+        got = ejecutar(tpm, params, "qsw").perdida
         assert got >= ref - 1e-6
+
+
+class TestRegistroDeEstrategias:
+    """El rename swq→qsw rompió la ejecución sin que ningún test lo notara.
+
+    `listar_estrategias()` descubre estrategias por **nombre de carpeta** (es lo
+    que puebla el dropdown del tab Execution y lo que valida `cli run`), pero
+    `runner.ejecutar` resuelve contra `SIA.registry`. Si los dos conjuntos no
+    coinciden, la estrategia aparece en la UI y revienta al ejecutarla.
+    """
+
+    @staticmethod
+    def _conjuntos():
+        import importlib
+        from pathlib import Path
+
+        from src.iit.strategies.python.sia import SIA
+        from src.tui.run.helpers import listar_estrategias
+
+        for d in sorted(Path("src/iit/strategies/python").iterdir()):
+            if d.is_dir() and (d / "code.py").exists():
+                importlib.import_module(f"src.iit.strategies.python.{d.name}.code")
+        return set(listar_estrategias()), set(SIA.registry)
+
+    def test_toda_carpeta_registra_su_nombre(self):
+        carpetas, registro = self._conjuntos()
+        assert not (carpetas - registro), (
+            f"carpetas visibles en la UI pero no registradas: {sorted(carpetas - registro)}"
+        )
+
+    def test_toda_estrategia_registrada_tiene_carpeta(self):
+        carpetas, registro = self._conjuntos()
+        assert not (registro - carpetas), (
+            f"registradas pero invisibles para la UI / `cli run`: {sorted(registro - carpetas)}"
+        )
+
+    def test_qsw_presente(self):
+        _, registro = self._conjuntos()
+        assert "qsw" in registro
+
+
+class TestOpciones:
+    """`modo` y `backend` son atributos declarados en `QSW.opciones`."""
+
+    def test_defaults(self):
+        from src.iit.strategies.python.qsw.code import QSW
+
+        assert QSW.defaults() == {"modo": "exacto", "backend": "python"}
+
+    @pytest.mark.parametrize(
+        "opciones, mensaje",
+        [
+            ({"backend": "rust"}, "inválido"),
+            ({"modo": "turbo"}, "inválido"),
+            ({"inexistente": "x"}, "no admite la opción"),
+        ],
+    )
+    def test_opcion_invalida_lanza_sin_instanciar(self, opciones, mensaje):
+        """Debe fallar antes de arrancar, no correr con el default en silencio."""
+        from src.iit.strategies.python.qsw.code import QSW
+
+        with pytest.raises(ValueError, match=mensaje):
+            QSW.validar_opciones(opciones)
+
+    def test_backend_c_falla_explicito_sin_libreria(self):
+        """Nunca degradar a Python en silencio: la opción entra en el nombre del
+        CSV, y un resultado etiquetado `backend=c` que corrió Python mentiría."""
+        from src.iit.strategies.python.qsw.backend import (
+            cargar_libqsw,
+            resolver_backend,
+        )
+
+        if cargar_libqsw() is not None:
+            pytest.skip("libqsw.so compilada — el backend C sí está disponible")
+        with pytest.raises(RuntimeError, match="backend 'c' no disponible"):
+            resolver_backend("c")
+        assert resolver_backend("auto") == "python"
+        assert resolver_backend("python") == "python"
+
+    def test_etiqueta_solo_incluye_lo_no_default(self):
+        """El nombre del CSV distingue corridas con opciones distintas."""
+        from src.tui.run.helpers import etiqueta_estrategia
+
+        assert etiqueta_estrategia("qsw", None) == "qsw"
+        assert etiqueta_estrategia("qsw", {"modo": "exacto"}) == "qsw"
+        assert etiqueta_estrategia("qsw", {"modo": "estatico"}) == "qsw+modo=estatico"
