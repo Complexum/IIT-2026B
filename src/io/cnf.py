@@ -79,6 +79,21 @@ def evaluar(clausulas: FormulaCNF, padres: tuple[int, ...]) -> np.ndarray:
     return valor.astype(np.float64)
 
 
+def depende_de_todas(tabla: np.ndarray, k: int) -> bool:
+    """¿La tabla depende de verdad de sus `k` entradas?
+
+    Una tabla aleatoria puede salir degenerada: con k=2, 2 de las 16 posibles son
+    constantes y 8 más dependen de una sola entrada. Si se admiten, el fan-in
+    efectivo es menor que el pedido y las mediciones que lo usan como perilla quedan
+    sucias. Vale igual para tablas de probabilidades, no sólo binarias.
+    """
+    nd = tabla.reshape((2,) * k, order="F")
+    return all(
+        not np.array_equal(np.take(nd, 0, axis=j), np.take(nd, 1, axis=j))
+        for j in range(k)
+    )
+
+
 def desde_tabla(tabla: np.ndarray, padres: tuple[int, ...]) -> FormulaCNF:
     """CNF canónica de una tabla de verdad: una cláusula por asignación falsa.
 

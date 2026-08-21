@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.io import cnf
+from src.io import cnf, pbn
 from src.iit.base.app import aplicacion
 from src.iit.base.consts import CSV_EXTENSION
 
@@ -139,19 +139,24 @@ COMPUERTAS = {
 }
 
 
-def _depende_de_todos(tabla: np.ndarray, ki: int) -> bool:
-    """¿La tabla depende de verdad de sus `ki` entradas?
+def elegir_padres(
+    n: int, k: int, rng: np.random.Generator, *, auto_lazo: bool = True
+) -> tuple[tuple[int, ...], ...]:
+    """Topología: `k` padres por nodo. Compartida por el generador binario y el PBN.
 
-    Una tabla de verdad aleatoria puede salir degenerada: con k=2, 2 de las 16
-    posibles son constantes y 8 más dependen de una sola entrada. Si se admiten,
-    el fan-in efectivo es menor que `k` y las mediciones que usan `k` como perilla
-    quedan sucias.
+    Args:
+        auto_lazo: si el nodo puede ser padre de sí mismo (el estado de un nodo en
+            t+1 depende del suyo en t — semántica normal de un FST).
     """
-    nd = tabla.reshape((2,) * ki, order="F")
-    return all(
-        not np.array_equal(np.take(nd, 0, axis=j), np.take(nd, 1, axis=j))
-        for j in range(ki)
-    )
+    if n < 1:
+        raise ValueError("n debe ser positivo")
+    k = max(1, min(k, n))
+    salida = []
+    for i in range(n):
+        elegibles = np.arange(n) if auto_lazo else np.delete(np.arange(n), i)
+        ki = min(k, elegibles.size)
+        salida.append(tuple(sorted(rng.choice(elegibles, size=ki, replace=False).tolist())))
+    return tuple(salida)
 
 
 def generar_espec(
@@ -177,22 +182,18 @@ def generar_espec(
             t+1 depende del suyo en t — semántica normal de un FST).
         semilla: si es None usa `aplicacion.semilla_numpy`.
     """
-    if n < 1:
-        raise ValueError("n debe ser positivo")
-    k = max(1, min(k, n))
     rng = np.random.default_rng(
         aplicacion.semilla_numpy if semilla is None else semilla
     )
+    padres = elegir_padres(n, k, rng, auto_lazo=auto_lazo)
 
-    padres, tablas = [], []
-    for i in range(n):
-        elegibles = np.arange(n) if auto_lazo else np.delete(np.arange(n), i)
-        ki = min(k, elegibles.size)
-        ps = tuple(sorted(rng.choice(elegibles, size=ki, replace=False).tolist()))
+    tablas = []
+    for i, ps in enumerate(padres):
+        ki = len(ps)
         if compuerta is None:
             t = rng.integers(2, size=1 << ki).astype(np.float64)
             for _ in range(256):
-                if not fan_in_estricto or _depende_de_todos(t, ki):
+                if not fan_in_estricto or cnf.depende_de_todas(t, ki):
                     break
                 t = rng.integers(2, size=1 << ki).astype(np.float64)
             else:
@@ -208,21 +209,54 @@ def generar_espec(
             u = np.arange(1 << ki, dtype=np.int64)
             bits = ((u[:, None] >> np.arange(ki)) & 1).astype(bool)
             t = fn(bits).astype(np.float64)
-        padres.append(ps)
         tablas.append(t)
-    return EspecFST(n=n, padres=tuple(padres), tablas=tuple(tablas))
+    return EspecFST(n=n, padres=padres, tablas=tuple(tablas))
+
+
+def generar_espec_pbn(
+    n: int,
+    k: int,
+    *,
+    funciones: int = 2,
+    ruido: float | None = None,
+    auto_lazo: bool = True,
+    semilla: int | None = None,
+) -> EspecFST:
+    """Red probabilística: compone `elegir_padres` con `pbn.generar_formulas`.
+
+    Toda la semántica PBN vive en `src/io/pbn.py`; acá sólo se ensambla.
+    """
+    rng = np.random.default_rng(aplicacion.semilla_numpy if semilla is None else semilla)
+    padres = elegir_padres(n, k, rng, auto_lazo=auto_lazo)
+    return espec_desde_cnf(
+        pbn.generar_formulas(padres, rng, funciones=funciones, ruido=ruido)
+    )
 
 
 def _ruta_spec(nombre: str) -> Path:
     return REDES_DIR / f"{nombre}.spec.json"
 
 
-def espec_desde_cnf(formulas: dict[int, cnf.FormulaCNF]) -> EspecFST:
-    """Compila `{variable: cláusulas}` a `EspecFST`.
+def _compilar_nodo(
+    spec: pbn.EspecNodo, n: int, v: int
+) -> tuple[tuple[int, ...], np.ndarray]:
+    """`(padres, tabla)` de un nodo, determinista o PBN. Despacha según `pbn.es_pbn`."""
+    if pbn.es_pbn(spec):
+        return pbn.compilar(spec, n, v)
+    cnf.validar(spec, n)
+    padres = cnf.variables_de(spec)
+    return padres, cnf.evaluar(spec, padres)
 
-    `n` sale de la cantidad de nodos y los padres de las variables que cada
-    fórmula menciona: nada se declara dos veces, así que nada puede quedar
-    desincronizado. Las claves deben ser exactamente `1..n`.
+
+def espec_desde_cnf(formulas: dict[int, pbn.EspecNodo]) -> EspecFST:
+    """Compila `{variable: especificación}` a `EspecFST`.
+
+    Cada nodo es una fórmula CNF (determinista) o una lista de pares
+    `(probabilidad, fórmula)` (PBN) — ver `_es_pbn`. Los dos conviven en la misma red.
+
+    `n` sale de la cantidad de nodos y los padres de las variables que cada fórmula
+    menciona: nada se declara dos veces, así que nada puede quedar desincronizado.
+    Las claves deben ser exactamente `1..n`.
     """
     n = len(formulas)
     faltan = set(range(1, n + 1)) - set(formulas)
@@ -231,11 +265,9 @@ def espec_desde_cnf(formulas: dict[int, cnf.FormulaCNF]) -> EspecFST:
 
     padres, tablas = [], []
     for v in range(1, n + 1):
-        clausulas = formulas[v]
-        cnf.validar(clausulas, n)
-        ps = cnf.variables_de(clausulas)
+        ps, tabla = _compilar_nodo(formulas[v], n, v)
         padres.append(ps)
-        tablas.append(cnf.evaluar(clausulas, ps))
+        tablas.append(tabla)
     return EspecFST(
         n=n,
         padres=tuple(padres),

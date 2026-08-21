@@ -206,29 +206,83 @@ n=6  k=1,2,3,4                       4096 cortes × 64 estados    max|Δ| = 0.00
 
 ## 7. Problemas abiertos
 
-### 7.1 En el régimen disperso binario, `φ = 0`
+### 7.1 En el régimen disperso, `φ = 0` — y la causa es topológica
 
-Con k=3 el mínimo da exactamente 0 desde n=20.
+> **Corregido.** La explicación original de esta sección era incorrecta. Decía que el
+> cero venía de que `Hᵢ, pᵢ ∈ {0,1}` hacían frecuente que la función fuera constante
+> sobre la cara, y que por lo tanto usar probabilidades lo arreglaría. **No lo
+> arregla.** Detalle completo en `PBN_Probabilistic_Networks.md` §6.
 
-`mean_A(δᵢ) = mean_A(Hᵢ) − pᵢ`. Con `Hᵢ ∈ {0,1}` y `pᵢ ∈ {0,1}`, el término es 0
-**sii la función del nodo es constante sobre esa cara**. Con k=3 las caras tienen
-≤ 8 celdas, así que ser constante es frecuente, y se puede elegir el mecanismo `A`
-para lograrlo en todos los nodos a la vez.
+`φ` mínimo, n=20, mediana de 3 semillas:
+
+| modelo | k=2 | k=3 | k=5 |
+|---|---|---|---|
+| binario | 0.000000 | 0.000000 | 0.281250 |
+| ruido=0.05 | 0.000000 | 0.000000 | 0.253125 |
+| ruido=0.20 | 0.000000 | 0.000000 | 0.168750 |
+| PBN L=3 | 0.000000 | 0.000000 | 0.011519 |
+
+La causa real: si `A ∩ padres(i) = ∅`, la cara de ese nodo colapsa a la celda del
+pivote, donde `δᵢ = 0` **por construcción**. El término se anula sin importar los
+valores de la tabla. Entonces `f(S) = 0` en cuanto exista un corte **cerrado** — un
+conjunto de dims `A` tal que cada nodo tenga *todos* o *ninguno* de sus padres en `A`.
+
+Verificado construyéndolo explícitamente (n=20, k=2): `|A| = 9/20`, alcance de 11
+nodos, `f = 0.0000000000` idéntico en binario, PBN y ruido.
+
+No es un error de cálculo: una red dispersa cuyo grafo se separa limpio **no está
+integrada**, y `φ = 0` es la respuesta correcta. El problema es la topología que
+genera `elegir_padres`: sorteando padres uniformemente con `k` chico casi siempre
+aparece un subconjunto cerrado.
+
+**La salida es topológica, no probabilística**: generar grafos dispersos pero **no
+separables** (anillo con atajos), donde la clausura de cualquier conjunto de padres
+sea todo el grafo.
+
+### 7.2 Las redes existentes no tienen spec — medido
+
+`src/io/identificabilidad.py` responde si una spec compacta es siquiera encontrable
+para una TPM dada, distinguiendo dos maneras de que no lo sea:
+
+    uv run python -m src.io.identificabilidad N10A N15A N20A
 
 ```
-n=20  k=3 → 0.000    k=8 → 0.441    k=12 → 0.479    k=16 → 0.497    k=20 → 0.499
+N10A  n=10
+  influencia por (nodo,dim): min=0.4531 mediana=0.5000 max=0.5566
+  piso de ruido: 0.0000  [determinista (sin muestreo)]
+  fan-in estimado por nodo: min=10 max=10
+  -> DENSA — algún nodo depende de las n dims; sin spec compacta
+
+N15A  n=15
+  influencia por (nodo,dim): min=0.0419 mediana=0.0432 max=0.0442
+  piso de ruido: 0.1265  [≈20 muestras/estado]   ratio mediana/ruido = 0.34
+  fan-in estimado por nodo: min=0 max=0
+  -> NO IDENTIFICABLE — toda la señal está bajo el ruido de muestreo
+
+N20A  n=20
+  influencia por (nodo,dim): min=0.4982 mediana=0.5000 max=0.5021
+  piso de ruido: 0.0000  [determinista (sin muestreo)]
+  fan-in estimado por nodo: min=20 max=20
+  -> DENSA — algún nodo depende de las n dims; sin spec compacta
 ```
 
-**La tensión:** el régimen donde el oráculo local gana (k chico) es justo donde el
-resultado es trivial. Con probabilidades en `(0,1)` la constancia exacta sobre una
-cara pasa a ser de medida cero, así que **lo continuo no es un extra: es lo que
-vuelve no trivial al régimen disperso.** Es el siguiente paso natural.
+**N10A y N20A** son deterministas con influencia 1/2 en cada par (nodo, dim): la
+firma de una función booleana aleatoria densa, que es exactamente lo que produce
+`generator.generar_red` sorteando cada celda por separado. No hay compresión posible
+**por conteo** — una función booleana aleatoria de `n` variables necesita `2^n` bits.
+Ninguna técnica lo evade, tampoco una red neuronal.
 
-### 7.2 Las redes existentes no tienen spec
+**N15A** es distinto y peor: es dato medido, y sus dependencias son *más chicas que
+su propio error de estimación*. No es un problema de algoritmo sino de datos.
 
-N10A…N20B sólo tienen TPM, y al ser aleatorias densas **no existe** una CNF compacta
-que las represente. El oráculo local aplica a redes generadas desde una spec o a
-sistemas reales cuya estructura se conoce — no se puede retro-ajustar a las actuales.
+Y no es que el diagnóstico sea laxo: una red `k=2` determinista medida con sólo 8
+muestras por estado **sigue** dando IDENTIFICABLE, porque sus influencias (~0.5–1.0)
+superan el piso (~0.2). Las dependencias fuertes sobreviven al ruido pesado. Las de
+N15A son genuinamente **débiles**, no sólo ruidosas.
+
+**Conclusión operativa:** para las redes viejas hay que ir a buscar la fuente del
+sistema, no invertir la matriz. Para sistemas reales eso siempre existe — la TPM sale
+de muestrear un FST, y el FST *es* la spec.
 
 ### 7.3 Falta condicionar y substraer
 
