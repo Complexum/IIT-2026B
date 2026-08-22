@@ -33,6 +33,10 @@ class SIA(ABC):
 
     registry: ClassVar[dict[str, type["SIA"]]] = {}
     necesita_mpt: ClassVar[dict[str, bool]] = {}
+    #: Estrategias que consumen la **especificación** (`.spec.json`) en vez de la
+    #: TPM materializada. La UI filtra el selector de red con esto, igual que con
+    #: `necesita_mpt`: una red sin spec no puede correr una estrategia que la pida.
+    necesita_espec: ClassVar[dict[str, bool]] = {}
 
     #: Opciones configurables de la estrategia: ``{atributo: (valor, ...)}``.
     #: El primer valor de cada tupla es el default. La TUI renderiza un selector
@@ -41,13 +45,18 @@ class SIA(ABC):
     opciones: ClassVar[dict[str, tuple[str, ...]]] = {}
 
     def __init_subclass__(
-        cls, nombre: str = "", necesita_mpt: bool = False, **kw
+        cls,
+        nombre: str = "",
+        necesita_mpt: bool = False,
+        necesita_espec: bool = False,
+        **kw,
     ) -> None:
         super().__init_subclass__(**kw)
         if nombre:
             cls.nombre = nombre
             SIA.registry[nombre] = cls
             SIA.necesita_mpt[nombre] = necesita_mpt
+            SIA.necesita_espec[nombre] = necesita_espec
 
     @classmethod
     def defaults(cls) -> dict[str, str]:

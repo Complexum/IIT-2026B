@@ -92,6 +92,28 @@ ProgramCard.selected {
     width: auto;
 }
 
+/* Fila de opciones de la estrategia (`SIA.opciones`). El widget no dibuja nada
+   cuando la estrategia no declara opciones, así que la fila colapsa sola. */
+.opciones-row {
+    height: auto;
+}
+
+.card-opciones {
+    height: auto;
+    padding: 0 1 1 1;
+}
+
+.opt-label {
+    width: auto;
+    padding: 1 1 0 1;
+    color: $text-muted;
+}
+
+.card-select-opt {
+    width: 1fr;
+    margin: 0 1;
+}
+
 .card-progress {
     width: 1fr;
     margin: 0 1;

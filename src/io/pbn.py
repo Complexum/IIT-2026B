@@ -136,3 +136,16 @@ def generar_formulas(
             [float(c), cnf.desde_tabla(x, ps)] for c, x in zip(pesos, tablas)
         ]
     return formulas
+
+
+def formatear(spec: EspecNodo, nombres: list[str] | None = None) -> str:
+    """Mezcla legible: `0.7·⟨A + C⟩ + 0.3·B`.
+
+    Delega en `cnf.formatear` para cada fórmula. Un nodo determinista se formatea
+    directo con ella; acá sólo se agrega la capa de pesos.
+    """
+    if not es_pbn(spec):
+        return cnf.formatear(spec, nombres)
+    return " + ".join(
+        f"{float(c):g}·{cnf.formatear(list(f), nombres)}" for c, f in spec
+    )

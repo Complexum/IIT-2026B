@@ -370,6 +370,50 @@ def listar_estrategias() -> list[str]:
     return sorted(registradas)
 
 
+def opciones_de_estrategia(estrategia: str) -> dict[str, tuple[str, ...]]:
+    """`SIA.opciones` de una estrategia: `{atributo: (valores admisibles, ...)}`.
+
+    El primer valor de cada tupla es el default (ver `SIA.defaults`). Vacío si la
+    estrategia no es configurable o no existe — la TUI simplemente no dibuja nada.
+    """
+    from src.iit.strategies.python.sia import SIA
+    from src.iit.strategies.runner import importar_estrategias
+
+    importar_estrategias()
+    cls = SIA.registry.get(estrategia)
+    return dict(cls.opciones) if cls is not None else {}
+
+
+def redes_compatibles(estrategia: str) -> list[tuple[str, str]]:
+    """`(etiqueta, nombre)` de las redes que esta estrategia **puede** consumir.
+
+    Una red es un nombre que puede tener CSV, sidecar `.npy` y/o especificación, en
+    cualquier combinación. Las estrategias con `necesita_espec` leen la spec y nunca
+    materializan la TPM, así que corren sobre redes que no tienen CSV —y que a n
+    grande jamás lo van a tener—. Las demás necesitan el CSV sí o sí.
+
+    Filtrar acá evita que la UI ofrezca combinaciones que fallan recién al ejecutar.
+    La etiqueta anota qué tiene cada red: `◆` spec, `▦` csv, `⚡` npy.
+    """
+    from src.iit.strategies.python.sia import SIA
+    from src.iit.strategies.runner import importar_estrategias
+    from src.io.manager import capacidades, listar_redes
+
+    importar_estrategias()
+    quiere_espec = SIA.necesita_espec.get(estrategia, False)
+
+    salida = []
+    for nombre in listar_redes():
+        cap = capacidades(nombre)
+        if estrategia and (not cap["spec"] if quiere_espec else not cap["csv"]):
+            continue
+        marcas = "".join(
+            m for m, k in (("◆", "spec"), ("▦", "csv"), ("⚡", "npy")) if cap[k]
+        )
+        salida.append((f"{nombre}  {marcas}", nombre))
+    return salida
+
+
 # ── Estimación de tiempo ─────────────────────────────────
 
 

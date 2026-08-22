@@ -44,6 +44,20 @@ class SubEspec:
     tablas: tuple[np.ndarray, ...]
     estado: tuple[int, ...]
 
+    def distribucion_marginal(self) -> np.ndarray:
+        """Igual que `System.distribucion_marginal`.
+
+        Existe para que `SIA.__init__` acepte un `SubEspec` sin cambios: lo único
+        que la clase base pide de un subsistema es esto, más `dims` e `indices`.
+        """
+        return marginal(self)
+
+    def bipartir_marginal(
+        self, alcance: set[int] | frozenset[int], mecanismo: set[int] | frozenset[int]
+    ) -> np.ndarray:
+        """`System.bipartir(...).distribucion_marginal()` en un paso, por posiciones."""
+        return marginal_biparticion(self, alcance, mecanismo)
+
     def __post_init__(self) -> None:
         if len(self.estado) != len(self.dims):
             raise ValueError("estado debe tener una entrada por dim")
@@ -127,3 +141,56 @@ def reducir_espec(espec: EspecFST, params: Params) -> SubEspec:
         tablas=tuple(tablas_out),
         estado=tuple(int(estado[d]) & 1 for d in dims),
     )
+
+
+def _media_cara(
+    padres: tuple[int, ...], tabla: np.ndarray, estado: tuple[int, ...], libres: set[int]
+) -> float:
+    """Media de la tabla con las dims de `libres` variando y el resto en `estado`.
+
+    Es `NCube.marginalizar(libres)` seguido de evaluar en el estado, en un solo
+    paso y en `O(2^k)`. Las dims de `libres` que no son padres del nodo no cambian
+    su valor, así que promediar sobre ellas es promediar una constante y se ignoran.
+    """
+    libres_locales = [j for j, p in enumerate(padres) if p in libres]
+    fijos = sum(
+        (estado[p] & 1) << j for j, p in enumerate(padres) if p not in libres
+    )
+    if not libres_locales:
+        return float(tabla[fijos])
+
+    u = np.arange(1 << len(libres_locales), dtype=np.int64)
+    despl = np.zeros(u.size, dtype=np.int64)
+    for t, j in enumerate(libres_locales):
+        despl |= ((u >> t) & 1) << j
+    return float(tabla[fijos | despl].mean())
+
+
+def marginal_biparticion(
+    sub: SubEspec,
+    alcance: set[int] | frozenset[int],
+    mecanismo: set[int] | frozenset[int],
+) -> np.ndarray:
+    """Equivalente de `System.bipartir(...).distribucion_marginal()`, sin `System`.
+
+    Args:
+        alcance: **posiciones** de nodo (0..N−1) que quedan del lado del alcance.
+        mecanismo: **posiciones** de dim (0..D−1) del mecanismo.
+
+    Reproduce la regla de `System.bipartir`: un nodo del alcance marginaliza las
+    dims que **no** están en el mecanismo; el resto marginaliza las que sí. Con
+    ambos conjuntos vacíos devuelve la marginal sin partir, o sea el valor de cada
+    nodo en el estado actual.
+    """
+    mec = set(mecanismo)
+    complemento = set(range(len(sub.dims))) - mec
+    valores = [
+        _media_cara(ps, tabla, sub.estado, complemento if i in alcance else mec)
+        for i, (ps, tabla) in enumerate(zip(sub.padres, sub.tablas))
+    ]
+    return np.array(valores, dtype=np.float32)
+
+
+def marginal(sub: SubEspec) -> np.ndarray:
+    """Valor de cada nodo en el estado actual — la marginal sin partir."""
+    return marginal_biparticion(sub, frozenset(), frozenset())

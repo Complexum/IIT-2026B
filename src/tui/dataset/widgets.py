@@ -30,12 +30,16 @@ class NetworkItem(Widget):
             self.name = name
             super().__init__()
 
-    def __init__(self, name: str, **kwargs) -> None:
+    def __init__(self, name: str, marcas: str = "", **kwargs) -> None:
         super().__init__(**kwargs)
         self.network_name = name
+        #: Qué tiene la red: `◆` spec, `▦` csv, `⚡` npy. Una red puede tener sólo
+        #: especificación (n grande, donde materializar la TPM es imposible).
+        self.marcas = marcas
 
     def compose(self) -> ComposeResult:
-        yield Button(self.network_name, classes="net-name")
+        etiqueta = f"{self.network_name}  {self.marcas}".rstrip()
+        yield Button(etiqueta, classes="net-name")
         yield Button("✕", variant="error", classes="net-del")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

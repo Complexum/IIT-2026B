@@ -21,16 +21,37 @@ def _natural_key(s: str) -> list:
 
 
 def listar_redes() -> list[str]:
-    """Listar nombres de redes disponibles en data/input/networks/."""
+    """Nombres de redes disponibles en `data/input/networks/`.
+
+    Una red es un **nombre**, no un archivo: puede tener CSV, sidecar `.npy` y/o
+    especificación `.spec.json`, en cualquier combinación. Una spec de n grande
+    nunca va a tener CSV —materializarlo es justamente lo que se evita— así que
+    listar sólo los `*.csv` la dejaría invisible en toda la interfaz.
+    """
     if not REDES_DIR.exists():
         return []
-    return sorted((f.stem for f in REDES_DIR.glob("*.csv")), key=_natural_key)
+    nombres = {f.stem for f in REDES_DIR.glob("*.csv")}
+    nombres |= {f.name[: -len(".spec.json")] for f in REDES_DIR.glob("*.spec.json")}
+    return sorted(nombres, key=_natural_key)
+
+
+def capacidades(nombre: str) -> dict[str, bool]:
+    """Qué tiene esta red: `{"csv": .., "npy": .., "spec": ..}`.
+
+    Sólo mira el sistema de archivos; no abre nada. La UI la usa para anotar el
+    selector y para filtrar según lo que la estrategia necesita.
+    """
+    return {
+        "csv": _ruta_csv(nombre).exists(),
+        "npy": _ruta_npy(nombre).exists(),
+        "spec": (REDES_DIR / f"{nombre}.spec.json").exists(),
+    }
 
 
 def dims_de_red(nombre: str) -> int:
     """n_dims de una red sin cargar el TPM.
 
-    1) Del nombre (N25B → 25). 2) Fallback: primera línea del CSV.
+    1) Del nombre (N25B → 25). 2) Primera línea del CSV. 3) La especificación.
     """
     m = re.match(r"[Nn](\d+)", nombre)
     if m:
@@ -40,7 +61,12 @@ def dims_de_red(nombre: str) -> int:
         with ruta.open() as f:
             return len(f.readline().split(","))
     except OSError:
-        return 0
+        pass
+    # Sin CSV: la spec también lo sabe, y una red puede tener sólo spec.
+    from src.io.fst import cargar_espec
+
+    espec = cargar_espec(nombre)
+    return espec.n if espec is not None else 0
 
 
 def _ruta_csv(nombre: str) -> Path:

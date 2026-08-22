@@ -275,6 +275,31 @@ def cnf_de_espec(espec: EspecFST) -> dict[int, cnf.FormulaCNF]:
     }
 
 
+def listar_especs() -> list[str]:
+    """Redes que tienen especificación, o sea sidecar `.spec.json`.
+
+    Una red puede tener spec sin CSV (n grande, donde materializar es imposible),
+    CSV sin spec (las viejas, generadas celda por celda), o las dos.
+    """
+    if not REDES_DIR.exists():
+        return []
+    return sorted(f.name[: -len(".spec.json")] for f in REDES_DIR.glob("*.spec.json"))
+
+
+def siguiente_nombre_red(n: int) -> str:
+    """`N{n}A`, `N{n}B`, … el primero que no esté tomado.
+
+    Mira CSV **y** spec: una spec sin materializar igual ocupa el nombre.
+    """
+    REDES_DIR.mkdir(parents=True, exist_ok=True)
+    sufijo = "A"
+    while (REDES_DIR / f"N{n}{sufijo}.{CSV_EXTENSION}").exists() or (
+        REDES_DIR / f"N{n}{sufijo}.spec.json"
+    ).exists():
+        sufijo = chr(ord(sufijo) + 1)
+    return f"N{n}{sufijo}"
+
+
 def guardar_espec(nombre: str, espec: EspecFST) -> Path:
     """Sidecar JSON junto al CSV. Su existencia marca a la red como estructurada.
 
@@ -326,11 +351,7 @@ def generar_red_booleana(
         n, k, compuerta=compuerta, auto_lazo=auto_lazo, semilla=semilla
     )
 
-    REDES_DIR.mkdir(parents=True, exist_ok=True)
-    sufijo = "A"
-    while (REDES_DIR / f"N{n}{sufijo}.{CSV_EXTENSION}").exists():
-        sufijo = chr(ord(sufijo) + 1)
-    nombre_base = f"N{n}{sufijo}"
+    nombre_base = siguiente_nombre_red(n)
 
     tpm = tpm_nodo_estado(espec)
     es_bin = espec.es_binaria()

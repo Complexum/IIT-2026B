@@ -13,7 +13,10 @@ from src.iit.strategies.runner import (
     resolver_estrategia,
 )
 from src.infra.monitoring.resource_monitor import ResourceMonitor
-from src.io.manager import cargar_mpt, preparar_ncubos
+from src.io.manager import cargar_mpt, capacidades, preparar_ncubos
+from src.io.fst import cargar_espec
+from src.io.reduccion import reducir_espec
+from src.iit.strategies.python.sia import SIA
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
     build_output_stem,
@@ -59,12 +62,34 @@ def handle(args) -> None:
         error(f"Estrategia '{prog.estrategia}' no disponible.")
         return
 
-    tpm = cargar_mpt(prog.dataset)
-    # Columnas del TPM una sola vez: rehacerlas por fila era el 66 %
-    # del tiempo del barrido (ver io.manager.preparar_ncubos).
-    ncubos = preparar_ncubos(tpm)
+    # Estrategias con `necesita_espec` leen la especificación y NUNCA materializan
+    # la TPM: es todo el punto de esa ruta (ver strategies/python/qsw_fst).
+    usa_espec = SIA.necesita_espec.get(prog.estrategia, False)
+    espec = tpm = ncubos = None
+    if usa_espec:
+        espec = cargar_espec(prog.dataset)
+        if espec is None:
+            error(
+                f"La red '{prog.dataset}' no tiene especificación (.spec.json), "
+                f"que '{prog.estrategia}' requiere. Creala en el tab Specification."
+            )
+            return
+        n_dims = espec.n
+    else:
+        if not capacidades(prog.dataset)["csv"]:
+            error(
+                f"La red '{prog.dataset}' no tiene TPM materializada (.csv), que "
+                f"'{prog.estrategia}' requiere. Sólo tiene especificación: usá una "
+                f"estrategia con `necesita_espec` (ver `cli list strategies`), o "
+                f"materializá el CSV desde el tab Specification."
+            )
+            return
+        tpm = cargar_mpt(prog.dataset)
+        # Columnas del TPM una sola vez: rehacerlas por fila era el 66 %
+        # del tiempo del barrido (ver io.manager.preparar_ncubos).
+        ncubos = preparar_ncubos(tpm)
+        n_dims = tpm.shape[1]
     patron = cargar_patron(prog.patron)
-    n_dims = tpm.shape[1]
     combis = generar_combinaciones(patron, n_dims)
     total = len(combis)
 
@@ -164,7 +189,11 @@ def handle(args) -> None:
                     # para todas las estrategias, así que se cronometra aparte y
                     # el monitor arranca recién después.
                     t_prep0 = time.perf_counter()
-                    subsistema = preparar_subsistema(tpm, params, ncubos)
+                    subsistema = (
+                        reducir_espec(espec, params)
+                        if usa_espec
+                        else preparar_subsistema(tpm, params, ncubos)
+                    )
                     t_prep = time.perf_counter() - t_prep0
 
                     monitor = ResourceMonitor()

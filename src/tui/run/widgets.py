@@ -8,7 +8,6 @@ from textual.widgets import Button, Checkbox, Label, ProgressBar, Rule, Select
 
 from pathlib import Path
 
-from src.io.manager import listar_redes
 
 _OUTPUT_DIR = Path("data/output")
 from src.tui.run.helpers import (
@@ -16,8 +15,47 @@ from src.tui.run.helpers import (
     estimar_tiempo,
     formatear_duracion,
     listar_estrategias,
+    opciones_de_estrategia,
+    podar_opciones,
+    redes_compatibles,
 )
 from src.tui.test.helpers import listar_patrones
+
+
+class OpcionesRow(Widget):
+    """Selectores de las opciones de la estrategia (`SIA.opciones`).
+
+    Es un widget aparte —y no parte del `compose` de `ProgramCard`— para poder
+    recomponerse solo cuando cambia la estrategia, sin resetear la barra de progreso
+    ni el estado de ejecución de la tarjeta.
+
+    No dibuja nada si la estrategia no declara opciones, que es el caso de la
+    mayoría (`analytic`, `queyranne`, `phi`).
+    """
+
+    def __init__(self, programa: Programa, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.__programa = programa
+
+    def compose(self) -> ComposeResult:
+        p = self.__programa
+        opciones = opciones_de_estrategia(p.estrategia)
+        if not opciones:
+            return
+        with Horizontal(classes="card-opciones"):
+            for attr, valores in opciones.items():
+                yield Label(f"{attr}:", classes="opt-label")
+                # El primer valor de cada tupla es el default (`SIA.defaults`).
+                actual = p.opciones.get(attr, valores[0])
+                if actual not in valores:
+                    actual = valores[0]
+                yield Select(
+                    options=[(v, v) for v in valores],
+                    value=actual,
+                    allow_blank=False,
+                    name=attr,  # el handler lee el atributo de acá
+                    classes="card-select-opt",
+                )
 
 
 class ProgramCard(Widget):
@@ -26,7 +64,7 @@ class ProgramCard(Widget):
     Mensajes que burbujean:
       - ProgramCard.Iniciado(nombre)     → on_program_card_iniciado
       - ProgramCard.Eliminado(nombre)    → on_program_card_eliminado
-      - ProgramCard.Configurado(nombre, dataset, patron, estrategia)
+      - ProgramCard.Configurado(nombre, dataset, patron, estrategia, opciones)
     """
 
     class Iniciado(Message):
@@ -46,12 +84,18 @@ class ProgramCard(Widget):
 
     class Configurado(Message):
         def __init__(
-            self, nombre: str, dataset: str, patron: str, estrategia: str
+            self,
+            nombre: str,
+            dataset: str,
+            patron: str,
+            estrategia: str,
+            opciones: dict[str, str] | None = None,
         ) -> None:
             self.nombre = nombre
             self.dataset = dataset
             self.patron = patron
             self.estrategia = estrategia
+            self.opciones = dict(opciones or {})
             super().__init__()
 
     def __init__(self, programa: Programa, **kwargs) -> None:
@@ -88,15 +132,29 @@ class ProgramCard(Widget):
             yield Button("✕", variant="error", classes="card-del")
 
         with Horizontal(classes="card-selectores"):
-            redes_disponibles = listar_redes()
-            dataset_valido = (
-                p.dataset
-                if p.dataset and p.dataset in redes_disponibles
+            # La ESTRATEGIA va primero porque decide el resto: qué redes son
+            # válidas (`necesita_espec` / `necesita_mpt`) y qué opciones existen.
+            estrategias_disponibles = listar_estrategias()
+            estrategia_valida = (
+                p.estrategia
+                if p.estrategia and p.estrategia in estrategias_disponibles
                 else Select.BLANK
             )
             yield Select(
-                options=[(n, n) for n in redes_disponibles],
-                prompt="Dataset",
+                options=[(n, n) for n in estrategias_disponibles],
+                prompt="Estrategia",
+                value=estrategia_valida,
+                classes="card-select",
+                id=f"sel-str-{p.nombre}",
+            )
+            redes = redes_compatibles(p.estrategia)
+            nombres = {v for _, v in redes}
+            dataset_valido = (
+                p.dataset if p.dataset and p.dataset in nombres else Select.BLANK
+            )
+            yield Select(
+                options=redes,
+                prompt="Red",
                 value=dataset_valido,
                 classes="card-select",
                 id=f"sel-ds-{p.nombre}",
@@ -114,26 +172,14 @@ class ProgramCard(Widget):
                 classes="card-select",
                 id=f"sel-pat-{p.nombre}",
             )
-            # Get list of available strategies and verify strategy is valid
-            estrategias_disponibles = listar_estrategias()
-            estrategia_valida = (
-                p.estrategia 
-                if p.estrategia and p.estrategia in estrategias_disponibles 
-                else Select.BLANK
-            )
-            yield Select(
-                options=[(n, n) for n in estrategias_disponibles],
-                prompt="Estrategia",
-                value=estrategia_valida,
-                classes="card-select",
-                id=f"sel-str-{p.nombre}",
-            )
             tiene_checkpoint = (_OUTPUT_DIR / f"{p.nombre}.csv").exists()
             yield Button(
                 "Continuar" if tiene_checkpoint else "Empezar",
                 variant="success",
                 classes="btn-empezar",
             )
+
+        yield OpcionesRow(p, classes="opciones-row")
 
         yield ProgressBar(total=100, show_eta=False, classes="card-progress")
         yield Label("", classes="card-combo")
@@ -167,6 +213,19 @@ class ProgramCard(Widget):
             self.__programa.patron = valor
         elif sel_id.startswith("sel-str-"):
             self.__programa.estrategia = valor
+            # Las opciones son POR estrategia: al cambiarla, las de la anterior
+            # dejan de aplicar. Se podan acá también —además de en la pantalla—
+            # para que lo que se ve coincida con lo que se guarda.
+            self.__programa.opciones, _ = podar_opciones(valor, self.__programa.opciones)
+            try:
+                self.query_one(OpcionesRow).refresh(recompose=True)
+            except Exception:
+                pass
+            self.__refiltrar_redes()
+        elif "card-select-opt" in event.select.classes:
+            attr = event.select.name or ""
+            if attr:
+                self.__programa.opciones[attr] = valor
 
         # Actualizar estimación de tiempo
         self.__actualizar_estimacion()
@@ -177,8 +236,29 @@ class ProgramCard(Widget):
                 self.__programa.dataset,
                 self.__programa.patron,
                 self.__programa.estrategia,
+                self.__programa.opciones,
             )
         )
+
+    def __refiltrar_redes(self) -> None:
+        """Deja en el selector sólo las redes que la estrategia puede consumir.
+
+        Se usa `set_options` en vez de recomponer para no perder el resto del
+        estado de la tarjeta. Si la red elegida deja de ser válida —por ejemplo al
+        pasar a una estrategia que exige especificación— se limpia en vez de
+        quedar seleccionada y fallar recién al ejecutar.
+        """
+        p = self.__programa
+        try:
+            sel = self.query_one(f"#sel-ds-{p.nombre}", Select)
+        except Exception:
+            return
+        redes = redes_compatibles(p.estrategia)
+        sel.set_options(redes)
+        if p.dataset and p.dataset in {v for _, v in redes}:
+            sel.value = p.dataset
+        else:
+            p.dataset = ""
 
     def __actualizar_estimacion(self) -> None:
         """Actualizar la etiqueta de tiempo estimado basado en el dataset.

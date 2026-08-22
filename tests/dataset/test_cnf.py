@@ -82,3 +82,47 @@ class TestIdaYVuelta:
         assert cnf.formatear(RED[2], ["A", "B", "C"]) == "AC"  # cláusulas unitarias
         assert cnf.formatear([], None) == "1"
         assert cnf.formatear([[]], None) == "0"
+
+
+class TestNombresDeVariable:
+    """El alfabeto se agota a 26 y el oráculo local llega a 60+ nodos.
+
+    Se usa base-26 estilo columna de hoja de cálculo en vez del alfabeto griego,
+    que acá colisiona con notación ya tomada (`δ = H − p`, `φ` la cantidad
+    calculada, `Σ`, `Θ`, `σ`, `ε`) y encima se agotaría a 50.
+    """
+
+    @pytest.mark.parametrize(
+        "indice, esperado",
+        [
+            (0, "A"),
+            (1, "B"),
+            (25, "Z"),
+            (26, "AA"),
+            (27, "AB"),
+            (51, "AZ"),
+            (52, "BA"),
+            (701, "ZZ"),
+            (702, "AAA"),
+        ],
+    )
+    def test_base_26(self, indice, esperado):
+        assert cnf.nombre_de_variable(indice) == esperado
+
+    def test_el_nombre_es_el_numero_de_variable_dimacs(self):
+        """`.spec.json` numera 1-indexado y las columnas también: `A=1`, `Z=26`,
+        `AA=27`. La correspondencia no es casual, es la misma indexación."""
+        for indice in range(60):
+            variable = indice + 1
+            # decodificar el nombre de vuelta a número debe dar la variable
+            valor = 0
+            for ch in cnf.nombre_de_variable(indice):
+                valor = valor * 26 + (ord(ch) - ord("A") + 1)
+            assert valor == variable
+
+    def test_no_se_repiten_ni_se_agotan(self):
+        nombres = cnf.nombres_de_variables(1000)
+        assert len(set(nombres)) == 1000
+
+    def test_solo_ascii_mayusculas(self):
+        assert all(n.isascii() and n.isupper() for n in cnf.nombres_de_variables(200))

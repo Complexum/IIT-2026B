@@ -141,6 +141,32 @@ def desde_tabla(tabla: np.ndarray, padres: tuple[int, ...]) -> FormulaCNF:
     return clausulas
 
 
+def nombre_de_variable(indice: int) -> str:
+    """Índice 0-based → nombre estilo columna de hoja de cálculo: `A…Z, AA, AB, …`.
+
+    El alfabeto se agota a 26 nodos y el oráculo por Zeta local llega a 60+, así que
+    hace falta un esquema ilimitado. Base-26 tiene una propiedad que lo hace natural
+    acá: las variables del `.spec.json` son **1-indexadas** (DIMACS) y las columnas
+    de hoja de cálculo también, así que el nombre *es* el número de variable escrito
+    en base 26 — `A=1`, `Z=26`, `AA=27`.
+
+    Descartado el alfabeto griego: en este proyecto `δ`, `Σ`, `φ`, `Θ`, `σ` y `ε` ya
+    tienen significado matemático (`δ = H − p`, `φ` la cantidad calculada), y encima
+    trae colisiones visuales propias (`ο`/`o`/`0`, `ι`/`i`, `ν`/`v`, `ρ`/`p`).
+    """
+    v = indice + 1
+    nombre = ""
+    while v:
+        v, resto = divmod(v - 1, 26)
+        nombre = chr(ord("A") + resto) + nombre
+    return nombre
+
+
+def nombres_de_variables(n: int) -> list[str]:
+    """Los `n` primeros nombres de variable, en orden."""
+    return [nombre_de_variable(i) for i in range(n)]
+
+
 def formatear(clausulas: FormulaCNF, nombres: list[str] | None = None) -> str:
     """Fórmula legible, para mensajes de error y depuración."""
     if not clausulas:

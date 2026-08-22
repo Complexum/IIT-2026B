@@ -10,6 +10,7 @@ from src.tui.dataset.screen import DatasetScreen
 from src.tui.results.screen import ResultsScreen
 from src.tui.run.screen import ExecutionScreen
 from src.tui.shared.base import IITFooter, IITHeader
+from src.tui.spec.screen import SpecScreen
 from src.tui.shared.consts import estilizar
 from src.tui.test.screen import TestingScreen
 
@@ -23,6 +24,7 @@ class MIPApp(App):
     CSS = estilizar()
 
     BINDINGS = [
+        ("s", "show_tab('spec')", "Specification"),
         ("d", "show_tab('dataset')", "Dataset"),
         ("t", "show_tab('testing')", "Testing"),
         ("e", "show_tab('execution')", "Execution"),
@@ -33,7 +35,9 @@ class MIPApp(App):
 
     def compose(self) -> ComposeResult:
         yield IITHeader()
-        with TabbedContent(initial="dataset"):
+        with TabbedContent(initial="spec"):
+            with TabPane("Specification", id="spec"):
+                yield SpecScreen()
             with TabPane("Dataset", id="dataset"):
                 yield DatasetScreen()
             with TabPane("Testing", id="testing"):

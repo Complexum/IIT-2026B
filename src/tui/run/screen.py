@@ -26,7 +26,14 @@ from src.iit.strategies.runner import (
 )
 from src.infra.middlewares.slogger import get_logger
 from src.infra.monitoring.resource_monitor import ResourceMonitor
-from src.io.manager import cargar_mpt, dims_de_red, preparar_ncubos
+from src.io.manager import (
+    capacidades,
+    cargar_mpt,
+    dims_de_red,
+    preparar_ncubos,
+)
+from src.io.fst import cargar_espec
+from src.io.reduccion import reducir_espec
 from src.tui.run.csv_utils import CSV_HEADERS, cargar_indices_completados
 from src.tui.run.helpers import (
     etiqueta_estrategia,
@@ -123,18 +130,17 @@ class ExecutionScreen(Widget):
             prog = cargar_programa(event.nombre)
             prog.dataset = event.dataset
             prog.patron = event.patron
-            if prog.estrategia != event.estrategia and prog.opciones:
-                # Las opciones son por estrategia: al cambiarla, las de la
-                # anterior dejan de aplicar y harían fallar la nueva.
-                prog.opciones, descartadas = podar_opciones(
-                    event.estrategia, prog.opciones
+            # Las opciones son por estrategia: se podan siempre contra la que llega,
+            # no sólo cuando cambia, para que también quede protegida la ruta CLI.
+            prog.opciones, descartadas = podar_opciones(
+                event.estrategia, event.opciones
+            )
+            if descartadas:
+                log.warn(
+                    f"Program '{event.nombre}': descartadas opciones que "
+                    f"'{event.estrategia}' no admite: "
+                    + ", ".join(f"{k}={v}" for k, v in sorted(descartadas.items()))
                 )
-                if descartadas:
-                    log.warn(
-                        f"Program '{event.nombre}': descartadas opciones que "
-                        f"'{event.estrategia}' no admite: "
-                        + ", ".join(f"{k}={v}" for k, v in sorted(descartadas.items()))
-                    )
             prog.estrategia = event.estrategia
             guardar_programa(prog)
         except Exception as e:
@@ -242,12 +248,33 @@ class ExecutionScreen(Widget):
                 log.warn(f"Program '{nombre}' missing dataset/patron/estrategia")
                 return
 
-            tpm = cargar_mpt(prog.dataset)
-            # Columnas del TPM una sola vez: rehacerlas por fila era el
-            # 66 % del barrido (ver io.manager.preparar_ncubos).
-            ncubos = preparar_ncubos(tpm)
+            # Las estrategias con `necesita_espec` leen la especificación y NUNCA
+            # materializan la TPM: es todo el punto de esa ruta.
+            importar_estrategias()
+            usa_espec = SIA.necesita_espec.get(prog.estrategia, False)
+            espec = tpm = ncubos = None
+            if usa_espec:
+                espec = cargar_espec(prog.dataset)
+                if espec is None:
+                    log.warn(
+                        f"Program '{nombre}': la red '{prog.dataset}' no tiene "
+                        f"especificación, que '{prog.estrategia}' requiere"
+                    )
+                    return
+                n_dims = espec.n
+            else:
+                if not capacidades(prog.dataset)["csv"]:
+                    log.warn(
+                        f"Program '{nombre}': la red '{prog.dataset}' no tiene TPM "
+                        f"materializada, que '{prog.estrategia}' requiere"
+                    )
+                    return
+                tpm = cargar_mpt(prog.dataset)
+                # Columnas del TPM una sola vez: rehacerlas por fila era el
+                # 66 % del barrido (ver io.manager.preparar_ncubos).
+                ncubos = preparar_ncubos(tpm)
+                n_dims = tpm.shape[1]
             patron = cargar_patron(prog.patron)
-            n_dims = tpm.shape[1]
             combis = generar_combinaciones(patron, n_dims)
             total = len(combis)
 
@@ -349,7 +376,11 @@ class ExecutionScreen(Widget):
                         # La preparación NO es parte del algoritmo: se cronometra aparte y el
                         # monitor arranca recién después (ver csv_utils.CSV_HEADERS).
                         t_prep0 = time.perf_counter()
-                        subsistema = preparar_subsistema(tpm, params, ncubos)
+                        subsistema = (
+                            reducir_espec(espec, params)
+                            if usa_espec
+                            else preparar_subsistema(tpm, params, ncubos)
+                        )
                         t_prep = time.perf_counter() - t_prep0
 
                         monitor = ResourceMonitor()

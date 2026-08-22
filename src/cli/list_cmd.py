@@ -58,8 +58,17 @@ def handle(args) -> None:
         if not items:
             warn("No hay estrategias disponibles.")
             return
-        rows = [[n, "Sí" if SIA.necesita_mpt.get(n, False) else "No"] for n in items]
-        print_table(["Estrategia", "Necesita MPT"], rows, title="Estrategias")
+        rows = [
+            [
+                n,
+                "Sí" if SIA.necesita_mpt.get(n, False) else "No",
+                "Sí" if SIA.necesita_espec.get(n, False) else "No",
+            ]
+            for n in items
+        ]
+        print_table(
+            ["Estrategia", "Necesita MPT", "Necesita Spec"], rows, title="Estrategias"
+        )
 
     else:
         warn(f"Recurso desconocido: {resource}")

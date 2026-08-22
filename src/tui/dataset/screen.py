@@ -9,6 +9,7 @@ from textual.widgets import Button, Checkbox, Input, Label, Static
 
 from src.io.generator import generar_red, peso_estimado
 from src.io.manager import (
+    capacidades,
     cargar_mpt,
     crear_sistema,
     desoptimizar_red,
@@ -88,6 +89,9 @@ class DatasetScreen(Widget):
         """Load the network list from disk when the tab is first shown."""
         # Caché de TPMs cargadas: evita releer el CSV completo en cada tecleo.
         self.__tpm_cache: dict[str, "np.ndarray"] = {}
+        # El diagnóstico de identificabilidad es O(N·D·2^D): se calcula una vez
+        # por red y no en cada repintado.
+        self.__veredicto_cache: dict[str, str] = {}
         # Evita que el set programático del checkbox dispare optimizar/desoptimizar.
         self.__sync_optimizar = False
         self.__refresh_network_list()
@@ -253,7 +257,36 @@ class DatasetScreen(Widget):
             item.remove()
         # Mount fresh items
         for name in listar_redes():
-            pane.mount(NetworkItem(name))
+            cap = capacidades(name)
+            marcas = "".join(
+                m for m, k in (("◆", "spec"), ("▦", "csv"), ("⚡", "npy")) if cap[k]
+            )
+            pane.mount(NetworkItem(name, marcas))
+
+    def __veredicto(self, nombre: str) -> str:
+        """¿Esta red sirve para la ruta que lee la especificación?
+
+        Si ya tiene `.spec.json` la respuesta es sí y no hay nada que diagnosticar.
+        Si no, `identificabilidad` dice si una spec compacta es siquiera
+        encontrable — puede no serlo por ser **densa** (incompresible por conteo) o
+        porque la señal está **bajo el ruido** de muestreo de la propia TPM.
+
+        Se cachea: `influencias()` es O(N·D·2^D) y a n=20 no se puede recalcular en
+        cada repintado.
+        """
+        if capacidades(nombre)["spec"]:
+            return "[b green]◆ tiene especificación[/b green]"
+        cacheado = self.__veredicto_cache.get(nombre)
+        if cacheado is None:
+            try:
+                from src.io.identificabilidad import diagnosticar
+
+                cacheado = diagnosticar(self.__tpm_cache[nombre], nombre)["veredicto"]
+            except Exception as e:  # noqa: BLE001
+                cacheado = f"diagnóstico no disponible ({type(e).__name__})"
+            self.__veredicto_cache[nombre] = cacheado
+        color = "green" if cacheado.startswith("IDENTIFICABLE") else "yellow"
+        return f"[b {color}]{cacheado}[/b {color}]"
 
     def __load_and_display(self, name: str) -> None:
         """Load a network and set sensible default input values."""
@@ -303,7 +336,9 @@ class DatasetScreen(Widget):
 
             # ── Column 1: Sistema Completo ──
             sistema = crear_sistema(tpm, estado)
-            self.query_one("#col-completo", Static).update(formatear_sistema(sistema))
+            self.query_one("#col-completo", Static).update(
+                self.__veredicto(name) + "\n\n" + formatear_sistema(sistema)
+            )
 
             # ── Column 2: Candidato (condicionado) ──
             cond_str = self.query_one("#inp-condiciones", Input).value

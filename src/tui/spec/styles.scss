@@ -1,0 +1,98 @@
+/* ═══════════════════════════════════════════
+   Specification Tab
+   ═══════════════════════════════════════════ */
+
+/* Sin esta regla el widget colapsa a altura cero dentro del TabPane y el tab
+   sale en blanco: `TabbedContent` da `1fr` al panel, pero el contenido tiene que
+   pedirlo también. Mismo patrón que `DatasetScreen`. */
+SpecScreen {
+    height: 1fr;
+    layout: vertical;
+}
+
+/* ── Toolbar de creación ── */
+
+#spec-toolbar {
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+    border-bottom: thick $surface-lighten-2;
+}
+
+#spec-toolbar Input {
+    width: 14;
+    margin-right: 2;
+}
+
+#spec-toolbar Select {
+    width: 22;
+    margin-right: 2;
+}
+
+#spec-toolbar Button {
+    width: auto;
+}
+
+/* ── Cuerpo: lista + panel ── */
+
+#spec-main {
+    layout: grid;
+    grid-size: 2;
+    grid-columns: 30 1fr;
+    height: 1fr;
+}
+
+#spec-lista {
+    height: 100%;
+    border-right: thick $surface-lighten-2;
+    padding: 1;
+}
+
+#spec-panel {
+    height: 1fr;
+    padding: 0 1;
+}
+
+#spec-acciones {
+    height: auto;
+    padding: 1 0;
+}
+
+#spec-acciones Button {
+    width: auto;
+}
+
+#spec-cols {
+    height: 1fr;
+}
+
+.spec-col {
+    width: 1fr;
+    border: solid $primary;
+    margin: 0 1;
+    padding: 1;
+}
+
+.col-title {
+    text-style: bold;
+    color: $accent;
+    padding-bottom: 1;
+}
+
+/* ── Ítems de la lista ── */
+
+SpecItem {
+    height: auto;
+    layout: horizontal;
+}
+
+.spec-name {
+    width: 1fr;
+    border: none;
+    text-align: left;
+}
+
+.spec-del {
+    width: auto;
+    border: none;
+}
