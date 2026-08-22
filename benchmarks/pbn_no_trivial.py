@@ -1,20 +1,31 @@
-"""¿El régimen disperso deja de ser trivial con nodos probabilísticos?
+"""¿Cuándo deja de ser trivial el régimen disperso?
 
     uv run python benchmarks/pbn_no_trivial.py [n] [n_cruce]
 
-Motivo. Con nodos **binarios**, `mean_A(δᵢ) = mean_A(Hᵢ) − pᵢ` y `Hᵢ, pᵢ ∈ {0,1}`,
-así que ese término vale 0 en cuanto la función del nodo es **constante sobre la
-cara**. Con `k` chico las caras son chicas y eso pasa seguido: `φ = 0` desde n=20 con
-k=3, o sea justo en el régimen donde el oráculo local gana. Con probabilidades en
-`(0,1)` la constancia exacta es de medida cero.
+El régimen donde el oráculo local gana (`k` chico) daba `φ = 0` siempre. Hay **tres**
+mecanismos que producen ese cero, y hacen falta las tres contramedidas juntas:
+
+1. **Corte cerrado.** Si `A ∩ padres(i) = ∅` la cara colapsa al pivote, donde
+   `δᵢ = 0` por construcción. Basta un `A` donde cada nodo tenga todos o ninguno de
+   sus padres. Es topológico: ni las probabilidades ni el ruido lo tocan.
+   → contramedida: `topologia="anillo"` (ver `io/topologia.py`).
+
+2. **Corte de una sola dim con alcance vacío.** Con `A = {d}` y alcance `∅`,
+   `mean_{d}(δᵢ) = (δᵢ(pivote) + δᵢ(pivote ⊕ eᵈ))/2` y el primer término es 0. Con
+   tablas **binarias** el segundo es 0 o ±½, así que se anula exacto con probabilidad
+   ~¼ por hijo — y la búsqueda prueba las `D` dims. Con tablas probabilísticas es un
+   real genérico y la cancelación exacta es de medida cero.
+   → contramedida: PBN.
+
+3. **El estado pivote.** Medir sólo en el estado todo-ceros enmascara los otros dos:
+   ahí muchos nodos son insensibles a un volteo simple.
+   → contramedida: barrer estados iniciales.
 
 Dos bloques:
 
-1. `φ` mínimo por (k, modelo) sobre el oráculo local. El binario es el control y
-   debe dar 0; los PBN deben dar `φ > 0` con k chico.
-2. Cruce contra `analytic` sobre la TPM materializada de la MISMA red, a un `n`
-   donde ambas rutas corren, para confirmar que siguen coincidiendo con tablas no
-   binarias.
+1. Fracción de estados con `φ = 0` por (modelo, topología, k).
+2. Cruce contra `analytic` sobre la TPM materializada de la MISMA red, a un `n` donde
+   ambas rutas corren, para confirmar que siguen coincidiendo con tablas no binarias.
 """
 
 import sys
@@ -30,13 +41,14 @@ from src.iit.strategies.python.zeta_local import (
 )
 from src.iit.strategies.runner import ejecutar
 from src.io.fst import generar_espec, generar_espec_pbn, tpm_nodo_estado
+from src.io.topologia import es_separable
 
 MODELOS = {
-    "binario": lambda n, k, s: generar_espec(n, k, semilla=s),
-    "ruido=0.05": lambda n, k, s: generar_espec_pbn(n, k, ruido=0.05, semilla=s),
-    "ruido=0.20": lambda n, k, s: generar_espec_pbn(n, k, ruido=0.20, semilla=s),
-    "PBN L=3": lambda n, k, s: generar_espec_pbn(n, k, funciones=3, semilla=s),
+    "binario": lambda n, k, s, t: generar_espec(n, k, topologia=t, semilla=s),
+    "ruido=0.20": lambda n, k, s, t: generar_espec_pbn(n, k, ruido=0.20, topologia=t, semilla=s),
+    "PBN L=3": lambda n, k, s, t: generar_espec_pbn(n, k, funciones=3, topologia=t, semilla=s),
 }
+TOPOLOGIAS = ("aleatoria", "anillo")
 
 
 def _f_batch(espec, estado):
@@ -67,19 +79,25 @@ def minimo(espec, estado):
     return valor
 
 
-def bloque_trivialidad(n: int, semillas=(5, 11, 23)):
-    print(f"φ mínimo sobre el oráculo local — n={n}, mediana de {len(semillas)} semillas\n")
-    print(f"  {'modelo':<12} " + "".join(f"k={k:<10}" for k in (2, 3, 5)))
+def bloque_trivialidad(n: int, estados: int = 24, semilla: int = 5):
+    print(f"Fracción de estados iniciales con φ = 0 — n={n}, {estados} estados al azar\n")
+    print(f"  {'modelo':<12}{'topología':<12}{'k':<3}{'sep':<5}{'ceros':<9}{'mediana φ':<12}max φ")
+    rng = np.random.default_rng(0)
+    muestras = [
+        tuple(int(b) for b in rng.integers(0, 2, size=n)) for _ in range(estados)
+    ]
     for nombre, hacer in MODELOS.items():
-        fila = []
-        for k in (2, 3, 5):
-            vals = []
-            for s in semillas:
-                espec = hacer(n, k, s)
-                vals.append(minimo(espec, tuple(0 for _ in range(n))))
-            fila.append(float(np.median(vals)))
-        marca = "  <- trivial" if all(v == 0.0 for v in fila) else ""
-        print(f"  {nombre:<12} " + "".join(f"{v:<12.6f}" for v in fila) + marca)
+        for topo in TOPOLOGIAS:
+            for k in (2, 3):
+                espec = hacer(n, k, semilla, topo)
+                sep = "sí" if es_separable(espec.padres) else "no"
+                v = np.array([minimo(espec, e) for e in muestras])
+                marca = "  <- no trivial" if (v > 0).all() else ""
+                print(
+                    f"  {nombre:<12}{topo:<12}{k:<3}{sep:<5}"
+                    f"{f'{(v == 0).sum()}/{estados}':<9}"
+                    f"{np.median(v):<12.6f}{v.max():.6f}{marca}"
+                )
 
 
 def bloque_cruce(n: int):
@@ -87,7 +105,7 @@ def bloque_cruce(n: int):
     print(f"  {'modelo':<12} {'k':<3} {'estado':<8} {'local':<12} {'analytic':<12} ok")
     for nombre, hacer in MODELOS.items():
         for k in (2, 3):
-            espec = hacer(n, k, 5)
+            espec = hacer(n, k, 5, "anillo")
             tpm = tpm_nodo_estado(espec)
             for s in (0, (1 << n) - 1):
                 estado = tuple((s >> j) & 1 for j in range(n))
@@ -100,7 +118,7 @@ def bloque_cruce(n: int):
 
 
 if __name__ == "__main__":
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 20
+    n = int(sys.argv[1]) if len(sys.argv) > 1 else 14
     n_cruce = int(sys.argv[2]) if len(sys.argv) > 2 else 8
     t0 = time.perf_counter()
     bloque_trivialidad(n)

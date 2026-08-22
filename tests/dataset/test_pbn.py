@@ -11,7 +11,7 @@ import pytest
 from src.io import cnf, pbn
 from src.io.fst import (
     cnf_de_espec,
-    elegir_padres,
+    # elegir_padres,
     espec_desde_cnf,
     generar_espec_pbn,
     tpm_nodo_estado,

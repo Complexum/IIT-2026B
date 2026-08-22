@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from src.io import cnf, pbn
+from src.io.topologia import elegir_padres
 from src.iit.base.app import aplicacion
 from src.iit.base.consts import CSV_EXTENSION
 
@@ -139,26 +140,6 @@ COMPUERTAS = {
 }
 
 
-def elegir_padres(
-    n: int, k: int, rng: np.random.Generator, *, auto_lazo: bool = True
-) -> tuple[tuple[int, ...], ...]:
-    """Topología: `k` padres por nodo. Compartida por el generador binario y el PBN.
-
-    Args:
-        auto_lazo: si el nodo puede ser padre de sí mismo (el estado de un nodo en
-            t+1 depende del suyo en t — semántica normal de un FST).
-    """
-    if n < 1:
-        raise ValueError("n debe ser positivo")
-    k = max(1, min(k, n))
-    salida = []
-    for i in range(n):
-        elegibles = np.arange(n) if auto_lazo else np.delete(np.arange(n), i)
-        ki = min(k, elegibles.size)
-        salida.append(tuple(sorted(rng.choice(elegibles, size=ki, replace=False).tolist())))
-    return tuple(salida)
-
-
 def generar_espec(
     n: int,
     k: int,
@@ -166,6 +147,7 @@ def generar_espec(
     compuerta: str | None = None,
     auto_lazo: bool = True,
     fan_in_estricto: bool = True,
+    topologia: str = "aleatoria",
     semilla: int | None = None,
 ) -> EspecFST:
     """FST binario con `k` padres por nodo.
@@ -178,6 +160,9 @@ def generar_espec(
             si no, una de `COMPUERTAS` aplicada a los padres.
         fan_in_estricto: re-sortea la tabla hasta que dependa de sus `k` padres,
             para que el fan-in efectivo sea el pedido y no menos.
+        topologia: ver `topologia.elegir_padres`. `"aleatoria"` casi siempre produce
+            redes **separables** con `k` chico, y ésas dan `φ = 0` por construcción;
+            `"anillo"` nunca.
         auto_lazo: si el nodo puede ser padre de sí mismo (el estado de un nodo en
             t+1 depende del suyo en t — semántica normal de un FST).
         semilla: si es None usa `aplicacion.semilla_numpy`.
@@ -185,7 +170,7 @@ def generar_espec(
     rng = np.random.default_rng(
         aplicacion.semilla_numpy if semilla is None else semilla
     )
-    padres = elegir_padres(n, k, rng, auto_lazo=auto_lazo)
+    padres = elegir_padres(n, k, rng, auto_lazo=auto_lazo, modo=topologia)
 
     tablas = []
     for i, ps in enumerate(padres):
@@ -220,6 +205,7 @@ def generar_espec_pbn(
     funciones: int = 2,
     ruido: float | None = None,
     auto_lazo: bool = True,
+    topologia: str = "aleatoria",
     semilla: int | None = None,
 ) -> EspecFST:
     """Red probabilística: compone `elegir_padres` con `pbn.generar_formulas`.
@@ -227,7 +213,7 @@ def generar_espec_pbn(
     Toda la semántica PBN vive en `src/io/pbn.py`; acá sólo se ensambla.
     """
     rng = np.random.default_rng(aplicacion.semilla_numpy if semilla is None else semilla)
-    padres = elegir_padres(n, k, rng, auto_lazo=auto_lazo)
+    padres = elegir_padres(n, k, rng, auto_lazo=auto_lazo, modo=topologia)
     return espec_desde_cnf(
         pbn.generar_formulas(padres, rng, funciones=funciones, ruido=ruido)
     )

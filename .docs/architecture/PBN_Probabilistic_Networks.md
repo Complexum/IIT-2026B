@@ -158,78 +158,106 @@ mano se conserva; no se reescribe como canónica.
 
 ---
 
-## 6. El resultado negativo, y la corrección a `Input_Representations.md` §7.1
+## 6. El régimen disperso: tres mecanismos, tres contramedidas
 
-### Lo que decía ese documento (incorrecto)
+Este es el resultado principal, y corrige dos explicaciones previas que eran
+incompletas (`Input_Representations.md` §7.1 original, y la primera versión de esta
+sección).
 
-> `mean_A(δᵢ) = mean_A(Hᵢ) − pᵢ`. Con `Hᵢ, pᵢ ∈ {0,1}` el término es 0 **sii la
-> función del nodo es constante sobre esa cara**. […] Con probabilidades en `(0,1)`
-> la constancia exacta pasa a ser de medida cero.
+`φ = 0` en el régimen disperso no tiene **una** causa sino tres, y sólo aplicando las
+tres contramedidas a la vez el régimen deja de ser trivial.
 
-De ahí se seguía que PBN arreglaría la trivialidad. **No la arregla.**
+### Mecanismo 1 — corte cerrado (topológico)
 
-### Lo medido
+Si `A ∩ padres(i) = ∅`, la cara del nodo `i` colapsa a la celda del pivote, donde
+`δᵢ = 0` **por construcción**. Basta entonces con que exista un `A` donde cada nodo
+tenga *todos* o *ninguno* de sus padres.
 
-`φ` mínimo sobre el oráculo local, n=20, mediana de 3 semillas:
-
-| modelo | k=2 | k=3 | k=5 |
-|---|---|---|---|
-| binario | 0.000000 | 0.000000 | 0.281250 |
-| ruido=0.05 | 0.000000 | 0.000000 | 0.253125 |
-| ruido=0.20 | 0.000000 | 0.000000 | 0.168750 |
-| PBN L=3 | 0.000000 | 0.000000 | 0.011519 |
-
-Con `k` chico da 0 **en todos los modelos**. Y en k=5 el PBN da *menos* φ que el
-binario, no más: mezclar funciones vuelve al nodo menos determinista y por lo tanto
-**menos** integrado.
-
-### La causa real: es topológica, no de los valores
-
-Si `A ∩ padres(i) = ∅`, la cara de ese nodo colapsa a la celda del pivote, donde
-`δᵢ = 0` **por construcción**. El término se anula sin importar qué tenga la tabla.
-
-Entonces `f(S) = 0` en cuanto exista un corte **cerrado**: un conjunto de dims `A`
-tal que cada nodo tenga *todos* o *ninguno* de sus padres en `A`. Se pone en el
-alcance a los nodos con todos sus padres en `A` y afuera a los demás.
-
-Verificado construyendo el corte explícitamente en una red de n=20, k=2:
+No depende de los valores: verificado con el mismo corte sobre tres redes (n=20,
+k=2), `|A| = 9/20`, alcance de 11 nodos:
 
 ```
-binario : |A| = 9/20  |alcance| = 11  ->  f = 0.0000000000
-PBN L=3 : |A| = 9/20  |alcance| = 11  ->  f = 0.0000000000
-ruido .2: |A| = 9/20  |alcance| = 11  ->  f = 0.0000000000
+binario : f = 0.0000000000
+PBN L=3 : f = 0.0000000000
+ruido .2: f = 0.0000000000
 ```
 
-Idéntico en los tres. **Las probabilidades no pueden tocar esto** porque el cero no
-viene de los valores.
+**Ni las probabilidades ni el ruido lo tocan.** Y sorteando padres uniformemente casi
+siempre aparece: n=20, `aleatoria`, **20/20** semillas separables con k=2, 11/20 con
+k=3, 3/20 con k=5.
 
-### Y no es un error: es la respuesta correcta de IIT
+→ **Contramedida: `topologia="anillo"`.** Fija `{i−1, i}` como columna vertebral, así
+la clausura de cualquier dim recorre el ciclo entero. Medido: **0/20 separables** con
+k=2, 3 y 5.
 
-Una red dispersa cuyo grafo de dependencias se separa limpio **no está integrada**.
-`φ = 0` es lo que corresponde. El problema no es el cálculo, es la **topología** que
-genera `elegir_padres`: al sortear padres uniformemente con `k` chico, casi siempre
-aparece un subconjunto cerrado.
+### Mecanismo 2 — corte de una sola dim con alcance vacío
+
+Con `A = {d}` y alcance `∅`:
+
+```
+mean_{d}(δᵢ) = ( δᵢ(pivote) + δᵢ(pivote ⊕ eᵈ) ) / 2
+```
+
+y el primer término es 0 por construcción. Con tablas **binarias** el segundo vale 0
+o ±½, así que se anula exacto en cuanto voltear esa dim no cambia la salida de sus
+hijos en el estado pivote — probabilidad ~¼ por hijo. Con k=2 cada dim tiene 2 hijos,
+y la búsqueda prueba las `D` dims: con n=12 la chance de que alguna funcione es ~97 %.
+
+Con tablas **probabilísticas** ese segundo término es un real genérico y la
+cancelación exacta pasa a ser de medida cero. **Acá sí aplica el argumento
+probabilístico** — al término de volteo simple, no a la constancia sobre la cara como
+decía la versión anterior.
+
+→ **Contramedida: PBN.**
+
+### Mecanismo 3 — el estado pivote
+
+Todas las mediciones previas usaban el estado **todo-ceros**, donde muchos nodos
+resultan insensibles a un volteo simple. Eso enmascaraba los otros dos.
+
+→ **Contramedida: barrer estados iniciales.**
+
+### Medido
+
+Fracción de estados con `φ = 0`, n=14, 24 estados al azar:
+
+| modelo | topología | k | separable | ceros | mediana φ | max φ |
+|---|---|---|---|---|---|---|
+| binario | aleatoria | 2 | sí | 24/24 | 0.000000 | 0.000000 |
+| binario | anillo | 3 | no | 23/24 | 0.000000 | 0.250000 |
+| ruido=0.20 | anillo | 3 | no | 23/24 | 0.000000 | 0.150000 |
+| PBN L=3 | aleatoria | 2 | sí | 24/24 | 0.000000 | 0.000000 |
+| PBN L=3 | aleatoria | 3 | no | 1/24 | 0.006105 | 0.110471 |
+| PBN L=3 | anillo | 2 | no | 13/24 | 0.000000 | 0.019374 |
+| **PBN L=3** | **anillo** | **3** | **no** | **1/24** | **0.026536** | **0.057752** |
+
+Lecturas:
+
+- **El binario no se salva con nada.** Con anillo y k=3 sigue dando 23/24 ceros: el
+  mecanismo 2 lo domina.
+- **El PBN solo tampoco alcanza** si la topología es separable (24/24 con k=2).
+- **Los dos juntos, con k=3, funcionan**: mediana 0.0265, y el anillo cuadruplica la
+  mediana respecto de `aleatoria` (0.0265 vs 0.0061).
+- `k=2` sigue siendo marginal aun con todo aplicado (13/24 ceros): hay pocos hijos por
+  dim y el término de volteo simple tiene pocos sumandos.
+
+### Y sigue sin ser un error
+
+Una red que se separa limpio, o en cuyo estado actual una dim no afecta a nadie, **no
+está integrada**. `φ = 0` es la respuesta correcta de IIT. Lo que hacía falta no era
+arreglar el cálculo sino **generar redes que no fueran triviales**.
 
 ---
 
-## 7. La tensión, y qué sigue
+## 7. Dónde queda esto
 
-El régimen donde el oráculo local gana (`k` chico) es justo donde la respuesta es
-trivial. Pero la salida ahora está identificada, y **no es probabilística**:
+El régimen donde el oráculo local gana ya **no** es trivial: `PBN L=3` + `anillo` +
+`k=3` da `φ > 0` en 23 de 24 estados. Eso desbloquea medir el oráculo local contra la
+ruta tradicional sobre redes que no son degeneradas.
 
-> Generar topologías **dispersas pero no separables**: que la clausura de cualquier
-> conjunto de padres sea todo el grafo, de modo que no exista corte cerrado propio.
-
-Un anillo con atajos (cada nodo toma como padre a su vecino más `k−1` al azar) lo
-consigue con `k` chico. Eso es una perilla de `elegir_padres`, no de `pbn.py`.
-
-El chequeo es barato y ya está escrito: buscar la clausura de cada conjunto de padres
-y verificar que ninguna sea un subconjunto propio. Conviene volverlo:
-
-1. una **validación del generador** — rechazar o marcar redes separables;
-2. un **test** — una topología de anillo no debe tener corte cerrado propio;
-3. una **columna del benchmark** — reportar si la red admite corte cerrado, para que
-   un `φ = 0` se lea como propiedad de la red y no como sospecha del algoritmo.
+`src/io/topologia.py` expone `es_separable(padres)` para que un `φ = 0` se lea como
+propiedad conocida de la red y no como sospecha del algoritmo. Conviene que el
+benchmark lo reporte siempre, como ya hace.
 
 ### Pendiente heredado de `Input_Representations.md`
 

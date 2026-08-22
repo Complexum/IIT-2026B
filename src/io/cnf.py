@@ -94,6 +94,26 @@ def depende_de_todas(tabla: np.ndarray, k: int) -> bool:
     )
 
 
+def condicionar(clausulas: FormulaCNF, variable: int, valor: int) -> FormulaCNF:
+    """Fija `variable` (1-indexada) en `valor` — **propagación unitaria**.
+
+    Es el paso clásico de Davis-Putnam: una cláusula que contiene el literal
+    satisfecho se elimina entera (ya es verdadera), y de las demás se borra el
+    literal falsificado. CNF es **cerrada** bajo esta operación.
+
+    Casos límite: si queda una cláusula vacía la fórmula es la constante 0; si no
+    queda ninguna cláusula, la constante 1.
+    """
+    satisfecho = variable if valor else -variable
+    falsificado = -satisfecho
+    salida: FormulaCNF = []
+    for clausula in clausulas:
+        if satisfecho in clausula:
+            continue  # la cláusula ya es verdadera
+        salida.append([lit for lit in clausula if lit != falsificado])
+    return salida
+
+
 def desde_tabla(tabla: np.ndarray, padres: tuple[int, ...]) -> FormulaCNF:
     """CNF canónica de una tabla de verdad: una cláusula por asignación falsa.
 

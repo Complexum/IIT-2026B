@@ -54,16 +54,13 @@ def preparar_oraculo_local(espec: EspecFST, estado_inicial: tuple[int, ...]) -> 
     """Zeta sobre la tabla de cada nodo. Nunca materializa la TPM.
 
     Args:
-        espec: la especificación del FST (padres + tabla por nodo).
-        estado_inicial: valor de cada nodo en `t`, indexado por nodo.
-
-    Nota: asume el sistema completo, o sea `dims = indices = (0..n-1)`. Condicionar
-    y substraer se aplican sobre la tabla local (un slice y un promedio, ambos
-    `O(2^kᵢ)`), pero eso todavía no está implementado.
+        espec: cualquier cosa con `.padres` y `.tablas` — un `EspecFST` (sistema
+            completo) o un `reduccion.SubEspec` (subsistema, donde `D != N`).
+        estado_inicial: valor de cada **dim** en `t`, indexado por posición de bit.
+            Su longitud define `D`.
     """
     sumas, pivotes = [], []
-    for i in range(espec.n):
-        padres = espec.padres[i]
+    for i, padres in enumerate(espec.padres):
         k = len(padres)
         piv = sum((int(estado_inicial[p]) & 1) << j for j, p in enumerate(padres))
 
@@ -82,7 +79,8 @@ def preparar_oraculo_local(espec: EspecFST, estado_inicial: tuple[int, ...]) -> 
         sumas=tuple(sumas),
         pivotes=tuple(pivotes),
         padres=espec.padres,
-        D=espec.n,
+        # D sale del estado, no del número de nodos: en un subsistema difieren.
+        D=len(estado_inicial),
     )
 
 

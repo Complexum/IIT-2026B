@@ -206,38 +206,26 @@ n=6  k=1,2,3,4                       4096 cortes × 64 estados    max|Δ| = 0.00
 
 ## 7. Problemas abiertos
 
-### 7.1 En el régimen disperso, `φ = 0` — y la causa es topológica
+### 7.1 El régimen disperso — resuelto, con tres contramedidas
 
-> **Corregido.** La explicación original de esta sección era incorrecta. Decía que el
-> cero venía de que `Hᵢ, pᵢ ∈ {0,1}` hacían frecuente que la función fuera constante
-> sobre la cara, y que por lo tanto usar probabilidades lo arreglaría. **No lo
-> arregla.** Detalle completo en `PBN_Probabilistic_Networks.md` §6.
+> **Corregido dos veces.** La explicación original culpaba a la constancia sobre la
+> cara con tablas binarias; la segunda, sólo a la topología. Las dos eran
+> incompletas. Desarrollo completo en `PBN_Probabilistic_Networks.md` §6.
 
-`φ` mínimo, n=20, mediana de 3 semillas:
+`φ = 0` en el régimen disperso tenía **tres** causas, y hay que atacarlas juntas:
 
-| modelo | k=2 | k=3 | k=5 |
-|---|---|---|---|
-| binario | 0.000000 | 0.000000 | 0.281250 |
-| ruido=0.05 | 0.000000 | 0.000000 | 0.253125 |
-| ruido=0.20 | 0.000000 | 0.000000 | 0.168750 |
-| PBN L=3 | 0.000000 | 0.000000 | 0.011519 |
+| # | mecanismo | contramedida |
+|---|---|---|
+| 1 | **corte cerrado**: si `A ∩ padres(i) = ∅` la cara colapsa al pivote. Topológico — los valores no lo tocan | `topologia="anillo"` (`io/topologia.py`) |
+| 2 | **corte de una dim con alcance vacío**: `(δᵢ(piv) + δᵢ(piv ⊕ eᵈ))/2`, que con tablas binarias se anula exacto con probabilidad ~¼ por hijo | nodos PBN (valores genéricos) |
+| 3 | **el estado pivote todo-ceros**, donde muchos nodos son insensibles a un volteo simple | barrer estados iniciales |
 
-La causa real: si `A ∩ padres(i) = ∅`, la cara de ese nodo colapsa a la celda del
-pivote, donde `δᵢ = 0` **por construcción**. El término se anula sin importar los
-valores de la tabla. Entonces `f(S) = 0` en cuanto exista un corte **cerrado** — un
-conjunto de dims `A` tal que cada nodo tenga *todos* o *ninguno* de sus padres en `A`.
+Medido a n=14 sobre 24 estados al azar: el binario con anillo y k=3 sigue dando 23/24
+ceros; el PBN con topología separable da 24/24; **`PBN L=3` + `anillo` + `k=3` da 1/24**,
+con mediana `φ = 0.0265`.
 
-Verificado construyéndolo explícitamente (n=20, k=2): `|A| = 9/20`, alcance de 11
-nodos, `f = 0.0000000000` idéntico en binario, PBN y ruido.
-
-No es un error de cálculo: una red dispersa cuyo grafo se separa limpio **no está
-integrada**, y `φ = 0` es la respuesta correcta. El problema es la topología que
-genera `elegir_padres`: sorteando padres uniformemente con `k` chico casi siempre
-aparece un subconjunto cerrado.
-
-**La salida es topológica, no probabilística**: generar grafos dispersos pero **no
-separables** (anillo con atajos), donde la clausura de cualquier conjunto de padres
-sea todo el grafo.
+No era un error de cálculo: una red que se separa limpio no está integrada y `φ = 0`
+es correcto. Lo que faltaba era **generar redes no triviales**.
 
 ### 7.2 Las redes existentes no tienen spec — medido
 
@@ -284,13 +272,37 @@ N15A son genuinamente **débiles**, no sólo ruidosas.
 sistema, no invertir la matriz. Para sistemas reales eso siempre existe — la TPM sale
 de muestrear un FST, y el FST *es* la spec.
 
-### 7.3 Falta condicionar y substraer
+### 7.3 ~~Falta condicionar y substraer~~ — hecho
 
-`preparar_oraculo_local` asume el sistema completo (`dims = indices = 0..n−1`), que
-es lo que dan los `Params("...", "1"*n, "1"*n, "1"*n)` de los tests. Para enchufarlo
-a `reducir_a_subsistema` hay que aplicar las dos operaciones sobre la tabla local:
-condicionar es un slice, marginalizar es un promedio sobre un eje — ambas `O(2^kᵢ)`.
-**No implementado.**
+`src/io/reduccion.py` replica `manager.reducir_a_subsistema` sobre las **tablas
+locales**, sin materializar la TPM. Las tres operaciones son `O(2^kᵢ)`:
+
+| operación | sobre la fórmula CNF | sobre la tabla |
+|---|---|---|
+| condicionar `d = v` | **propagación unitaria** (`cnf.condicionar`), el paso de Davis-Putnam — CNF → CNF | slice de la mitad |
+| marginalizar `d` | `½·f\|_{d=0} + ½·f\|_{d=1}` — CNF → **PBN** | promedio de las dos mitades |
+| substraer nodo | quitar su entrada | quitar la fila |
+
+**Marginalizar no es cerrado sobre funciones booleanas** —el promedio de dos
+booleanas no lo es— pero es exactamente una mezcla de dos con peso ½, o sea un nodo
+PBN. **El PBN resulta ser la clausura algebraica de CNF bajo la operación que la
+reducción de IIT necesita**, lo cual es una justificación del modelo bastante mejor
+que "sirve para meter ruido".
+
+`SubEspec` separa `D` de `N`, que dejan de coincidir tras reducir, y reetiqueta los
+padres a posiciones dentro de `dims` — que es lo que indexan los bits de la máscara.
+
+**Validado** contra el pipeline con condicionamiento y substracción reales, sobre
+todos los cortes de cada subsistema:
+
+```
+binario    67 subsistemas,  6772 cortes  ->  max|Δ| = 0.000e+00
+PBN L=3    60 subsistemas,  2348 cortes  ->  max|Δ| = 8.684e-08   (piso float32)
+ruido=0.2  68 subsistemas,  2708 cortes  ->  max|Δ| = 9.537e-08
+```
+
+También coinciden `dims` e `indices` con los del `System` reducido, incluido el caso
+límite en que no sobrevive ningún nodo y `dims` queda vacío.
 
 ### 7.4 Todavía no es una estrategia registrada
 
