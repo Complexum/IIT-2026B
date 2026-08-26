@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from src.iit.core.params import Params
-from src.iit.strategies.python.qn.oracle import (
+from src.iit.strategies.python.qsw.oracle import (
     f_cara,
     f_cara_batch,
     preparar_oraculo,
@@ -163,7 +163,7 @@ class TestEstrategia:
         tpm = cargar_mpt(RED)
         n = tpm.shape[1]
         params = Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n)
-        ref = ejecutar(tpm, params, "analytic").perdida
+        ref = ejecutar(tpm, params, "analytical").perdida
         got = ejecutar(tpm, params, "qsw").perdida
         assert got >= ref - 1e-6
 
@@ -301,7 +301,7 @@ class TestMuestreo:
         tpm = cargar_mpt(RED)
         n = tpm.shape[1]
         params = Params("1" + "0" * (n - 1), "1" * n, "1" * n, "1" * n)
-        ref = ejecutar(tpm, params, "analytic").perdida
+        ref = ejecutar(tpm, params, "analytical").perdida
         got = ejecutar(tpm, params, "qsw", opciones={"modo": "estocastico"}).perdida
         assert abs(got - ref) < 1e-6
 

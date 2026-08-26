@@ -39,7 +39,7 @@ import multiprocessing as mp
 import numpy as np
 
 from src.iit.base.app import aplicacion
-from src.iit.strategies.python.qn.oracle import Oraculo
+from src.iit.strategies.python.qsw.oracle import Oraculo
 from src.iit.strategies.python.zeta import pivote_plano, zeta_inplace
 
 # ── Estado del worker (poblado por el initializer del Pool) ────────────────

@@ -46,7 +46,7 @@ def redes(tmp_path, monkeypatch):
 
 class TestFiltro:
     def test_estrategia_de_tpm_solo_ve_las_que_tienen_csv(self, redes):
-        assert {v for _, v in redes_compatibles("analytic")} == {"N4A", "N4C"}
+        assert {v for _, v in redes_compatibles("analytical")} == {"N4A", "N4C"}
 
     def test_estrategia_de_spec_solo_ve_las_que_tienen_spec(self, redes):
         assert {v for _, v in redes_compatibles("qsw_fst")} == {"N4B", "N4C"}
@@ -56,9 +56,9 @@ class TestFiltro:
 
     def test_la_etiqueta_anota_las_capacidades(self, redes):
         etiquetas = dict((v, e) for e, v in redes_compatibles(""))
-        assert etiquetas["N4A"].endswith("▦")       # sólo csv
-        assert etiquetas["N4B"].endswith("◆")       # sólo spec
-        assert etiquetas["N4C"].endswith("◆▦")      # las dos
+        assert etiquetas["N4A"].endswith("🅒")       # sólo csv
+        assert etiquetas["N4B"].endswith("Ⓢ")       # sólo spec
+        assert etiquetas["N4C"].endswith("Ⓢ🅒")      # las dos
 
 
 class TestTarjeta:
@@ -72,7 +72,7 @@ class TestTarjeta:
 
     def test_cambiar_a_estrategia_de_spec_refiltra_el_selector(self, redes):
         prog = Programa(
-            nombre="p", dataset="N4A", patron="patron-2", estrategia="analytic"
+            nombre="p", dataset="N4A", patron="patron-2", estrategia="analytical"
         )
 
         async def cuerpo(app, pilot):
@@ -87,7 +87,7 @@ class TestTarjeta:
 
     def test_red_valida_para_ambas_sobrevive_al_cambio(self, redes):
         prog = Programa(
-            nombre="p", dataset="N4C", patron="patron-2", estrategia="analytic"
+            nombre="p", dataset="N4C", patron="patron-2", estrategia="analytical"
         )
 
         async def cuerpo(app, pilot):

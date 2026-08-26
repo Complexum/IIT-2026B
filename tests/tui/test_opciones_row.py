@@ -53,7 +53,7 @@ class TestHelper:
         assert set(opciones_de_estrategia("qsw")) == {"backend", "modo", "k"}
 
     def test_estrategia_sin_opciones_da_vacio(self):
-        assert opciones_de_estrategia("analytic") == {}
+        assert opciones_de_estrategia("analytical") == {}
 
     def test_estrategia_inexistente_no_lanza(self):
         assert opciones_de_estrategia("no-existe") == {}
@@ -74,7 +74,7 @@ class TestRenderizado:
         async def cuerpo(app, _):
             return len(app.query_one(OpcionesRow).query(Select))
 
-        assert _con_app(_prog("analytic"), cuerpo) == 0
+        assert _con_app(_prog("analytical"), cuerpo) == 0
 
     def test_muestra_el_valor_guardado_no_el_default(self):
         async def cuerpo(app, _):

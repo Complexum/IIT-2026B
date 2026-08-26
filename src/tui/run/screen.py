@@ -223,8 +223,12 @@ class ExecutionScreen(Widget):
         guardar_programa(prog)
         self.__refrescar_programas()
 
-    def refrescar_datasets(self) -> None:
-        """Re-render all ProgramCards to pick up changed network list."""
+    def refrescar_lista(self) -> None:
+        """Re-render all ProgramCards to pick up changed network list.
+
+        Renombrada de `refrescar_datasets` para la interfaz uniforme de
+        `shared/redes.py`: todo tab que muestra redes implementa esto.
+        """
         self.__refrescar_programas()
 
     def __refrescar_programas(self) -> None:

@@ -111,7 +111,7 @@ def bloque_cruce(n: int):
                 estado = tuple((s >> j) & 1 for j in range(n))
                 txt = "".join(map(str, estado))
                 loc = minimo(espec, estado)
-                ana = ejecutar(tpm, Params(txt, "1" * n, "1" * n, "1" * n), "analytic").perdida
+                ana = ejecutar(tpm, Params(txt, "1" * n, "1" * n, "1" * n), "analytical").perdida
                 ok = abs(loc - ana) < 1e-5
                 print(f"  {nombre:<12} {k:<3} {txt:<8} {loc:<12.6f} {ana:<12.6f} "
                       f"{'ok' if ok else '<-- DIFIERE'}")

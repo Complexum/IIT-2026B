@@ -11,6 +11,7 @@ from src.io.generator import generar_red, peso_estimado
 from src.io.manager import (
     capacidades,
     cargar_mpt,
+    marcas_de_red,
     crear_sistema,
     desoptimizar_red,
     dims_de_red,
@@ -21,8 +22,10 @@ from src.io.manager import (
 )
 from src.tui.dataset.helpers import formatear_sistema, parsear_estado, parsear_indices
 from src.tui.dataset.modal import DIMS_WARN_THRESHOLD, ConfirmarCargaModal
+from src.tui.dataset.veredicto import VeredictoBar
 from src.tui.dataset.widgets import NetworkItem
 from src.tui.shared.consts import estilizar
+from src.tui.shared.redes import refrescar_tabs_de_redes
 import numpy as np
 
 class DatasetScreen(Widget):
@@ -56,8 +59,11 @@ class DatasetScreen(Widget):
                 yield Label("Networks", classes="pane-title")
                 # NetworkItem widgets are added dynamically in on_mount
 
-            # Right column: operation inputs + 3 display columns
+            # Right column: veredicto + operation inputs + 3 display columns
             with Vertical(id="right-pane"):
+                # Informe de identificabilidad de la red seleccionada
+                yield VeredictoBar()
+
                 # 4 text inputs that control the operations below
                 with Horizontal(id="inputs-row"):
                     with Vertical(classes="inp-group"):
@@ -89,12 +95,9 @@ class DatasetScreen(Widget):
         """Load the network list from disk when the tab is first shown."""
         # Caché de TPMs cargadas: evita releer el CSV completo en cada tecleo.
         self.__tpm_cache: dict[str, "np.ndarray"] = {}
-        # El diagnóstico de identificabilidad es O(N·D·2^D): se calcula una vez
-        # por red y no en cada repintado.
-        self.__veredicto_cache: dict[str, str] = {}
         # Evita que el set programático del checkbox dispare optimizar/desoptimizar.
         self.__sync_optimizar = False
-        self.__refresh_network_list()
+        self.refrescar_lista()
 
     def __sync_checkbox_optimizar(self, name: str) -> None:
         """Refleja en el checkbox si la red seleccionada tiene sidecar .npy."""
@@ -176,6 +179,8 @@ class DatasetScreen(Widget):
         def _finish() -> None:
             if self.selected_network == name:
                 self.__sync_checkbox_optimizar(name)
+            # La marca Ⓝ cambia en las listas de los otros tabs también.
+            refrescar_tabs_de_redes(self.app)
             self.notify(msg)
 
         self.app.call_from_thread(_finish)
@@ -196,22 +201,22 @@ class DatasetScreen(Widget):
             self.__load_and_display(event.name)
 
     def on_network_item_deleted(self, event: NetworkItem.Deleted) -> None:
-        """Delete button (✕) clicked — remove the file and refresh the list."""
+        """Delete button (✕) clicked — remove the CSV/.npy and refresh every tab.
+
+        Una red con `.spec.json` NO desaparece de la lista (sólo pierde 🅒/Ⓝ):
+        la spec sigue en disco y es una red válida. Sin el notify esto parecía
+        que el borrado fallaba.
+        """
         eliminar_red(event.name)
         self.__tpm_cache.pop(event.name, None)
         if self.selected_network == event.name:
             self.selected_network = ""
             self.__clear_display()
-        self.__refresh_network_list()
-        self.__notify_execution_refresh()
-
-    def __notify_execution_refresh(self) -> None:
-        from src.tui.run.screen import ExecutionScreen
-
-        try:
-            self.app.query_one(ExecutionScreen).refrescar_datasets()
-        except Exception:
-            pass
+        refrescar_tabs_de_redes(self.app)
+        if capacidades(event.name)["spec"]:
+            self.notify(f"'{event.name}': CSV/npy eliminados — queda Ⓢ spec")
+        else:
+            self.notify(f"'{event.name}' eliminada")
 
     # ── Helpers Privados ──
 
@@ -246,47 +251,21 @@ class DatasetScreen(Widget):
         except (ValueError, TypeError):
             return
         generar_red(dims, datos_deterministas=chk_discretos.value, optimizar=chk_optimizar.value)
-        self.__refresh_network_list()
-        self.__notify_execution_refresh()
+        refrescar_tabs_de_redes(self.app)
 
-    def __refresh_network_list(self) -> None:
-        """Reload the network list from data/input/networks/."""
+    def refrescar_lista(self) -> None:
+        """Reload the network list from data/input/networks/.
+
+        Pública: la llaman los otros tabs al mutar el disco (ver
+        `shared/redes.py`).
+        """
         pane = self.query_one("#left-pane", VerticalScroll)
         # Remove only NetworkItem widgets (keep the "Networks" title Label)
         for item in list(pane.query(NetworkItem)):
             item.remove()
         # Mount fresh items
         for name in listar_redes():
-            cap = capacidades(name)
-            marcas = "".join(
-                m for m, k in (("◆", "spec"), ("▦", "csv"), ("⚡", "npy")) if cap[k]
-            )
-            pane.mount(NetworkItem(name, marcas))
-
-    def __veredicto(self, nombre: str) -> str:
-        """¿Esta red sirve para la ruta que lee la especificación?
-
-        Si ya tiene `.spec.json` la respuesta es sí y no hay nada que diagnosticar.
-        Si no, `identificabilidad` dice si una spec compacta es siquiera
-        encontrable — puede no serlo por ser **densa** (incompresible por conteo) o
-        porque la señal está **bajo el ruido** de muestreo de la propia TPM.
-
-        Se cachea: `influencias()` es O(N·D·2^D) y a n=20 no se puede recalcular en
-        cada repintado.
-        """
-        if capacidades(nombre)["spec"]:
-            return "[b green]◆ tiene especificación[/b green]"
-        cacheado = self.__veredicto_cache.get(nombre)
-        if cacheado is None:
-            try:
-                from src.io.identificabilidad import diagnosticar
-
-                cacheado = diagnosticar(self.__tpm_cache[nombre], nombre)["veredicto"]
-            except Exception as e:  # noqa: BLE001
-                cacheado = f"diagnóstico no disponible ({type(e).__name__})"
-            self.__veredicto_cache[nombre] = cacheado
-        color = "green" if cacheado.startswith("IDENTIFICABLE") else "yellow"
-        return f"[b {color}]{cacheado}[/b {color}]"
+            pane.mount(NetworkItem(name, marcas_de_red(name)))
 
     def __load_and_display(self, name: str) -> None:
         """Load a network and set sensible default input values."""
@@ -305,8 +284,20 @@ class DatasetScreen(Widget):
             # (e.g. two networks with the same number of dimensions).
             self.__update_display()
 
+        except FileNotFoundError:
+            self.__mostrar_solo_spec(name)
         except Exception as e:
             self.query_one("#col-completo", Static).update(f"Error: {e}")
+
+    def __mostrar_solo_spec(self, name: str) -> None:
+        """Red sin CSV (sólo `.spec.json`): no hay TPM que mostrar acá."""
+        self.query_one(VeredictoBar).actualizar(name)
+        self.query_one("#col-completo", Static).update(
+            "[b yellow]Ⓢ sólo especificación — sin CSV materializado[/b yellow]\n"
+            "Materializa el CSV desde la pestaña Specs para operar aquí."
+        )
+        self.query_one("#col-candidato", Static).update("")
+        self.query_one("#col-subsistema", Static).update("")
 
     def __update_display(self) -> None:
         """Recalculate and render the 3 display columns.
@@ -323,6 +314,9 @@ class DatasetScreen(Widget):
             tpm = self.__tpm(self.selected_network)
             n_dims = tpm.shape[1]
 
+            # ── Veredicto de identificabilidad (con su propia caché) ──
+            self.query_one(VeredictoBar).actualizar(self.selected_network, tpm)
+
             # ── Parse estado ──
             estado_str = self.query_one("#inp-estado", Input).value
             estado = parsear_estado(estado_str)
@@ -337,7 +331,7 @@ class DatasetScreen(Widget):
             # ── Column 1: Sistema Completo ──
             sistema = crear_sistema(tpm, estado)
             self.query_one("#col-completo", Static).update(
-                self.__veredicto(name) + "\n\n" + formatear_sistema(sistema)
+                formatear_sistema(sistema)
             )
 
             # ── Column 2: Candidato (condicionado) ──
@@ -362,12 +356,15 @@ class DatasetScreen(Widget):
                 formatear_sistema(subsistema)
             )
 
+        except FileNotFoundError:
+            self.__mostrar_solo_spec(self.selected_network)
         except Exception as e:
             self.query_one("#col-completo", Static).update(f"Error: {e}")
 
     def __clear_display(self) -> None:
         """Clear all display columns and operation inputs."""
         self.__sync_checkbox_optimizar("")  # sin red → checkbox off/disabled
+        self.query_one(VeredictoBar).limpiar()
         for col_id in ("#col-completo", "#col-candidato", "#col-subsistema"):
             self.query_one(col_id, Static).update("")
         for inp_id in (

@@ -173,7 +173,7 @@ class TestPipelineTradicional:
             estado = "".join(str((s >> j) & 1) for j in range(N))
             params = Params(estado, "1" * N, "1" * N, "1" * N)
             ref = ejecutar(tpm, params, "phi").perdida
-            for estrategia in ("analytic", "qsw"):
+            for estrategia in ("analytical", "qsw"):
                 got = ejecutar(tpm, params, estrategia).perdida
                 assert got == pytest.approx(ref, abs=1e-5), (
                     f"k={k} estado={estado} {estrategia}={got} phi={ref}"

@@ -210,3 +210,118 @@ El punto 4 es el que valida la decisión de namespace único; si falla, el dise�
 - `Fatal Python error: Bus error` en `tests/dataset/test_io.py` (carrera del
   `optimizar_red` en hilo *fire-and-forget*).
 - Traer a esta rama el fix del default de `modo`, que está en `main` (`33d5e55`).
+
+---
+
+# Guía de la interfaz
+
+Esta sección responde "qué es cada cosa que veo en pantalla". Lo de arriba es el
+plan de implementación; esto es el manual.
+
+## Los tres iconos
+
+Aparecen en Specification, Dataset y en el selector de Execution, con el **mismo
+significado en los tres**:
+
+| icono | qué |
+|---|---|
+| **Ⓢ** | tiene **especificación** (`.spec.json`) — la red definida por padres + fórmula por nodo |
+| **🇨** | tiene **TPM materializada** (`.csv`) — la matriz de `2^n × n` de siempre |
+| **⚡** | tiene **caché binaria** (`.npy`) — el mismo CSV en formato mapeable, para cargar más rápido |
+
+Una red es un **nombre**, no un archivo: puede tener cualquier combinación. `N10C Ⓢ🇨`
+tiene las dos cosas y sirve para comparar rutas. `N25B Ⓢ` sólo tiene spec — su TPM
+pesaría 6.7 GB y no existe, por eso `analytic` no puede correr sobre ella.
+
+## Tab Specification
+
+### La barra de creación
+
+| control | qué es |
+|---|---|
+| **Nodos (n)** | cuántos nodos tiene la red. La TPM tendría `2^n` filas; la spec no. |
+| **Fan-in (k)** | **cuántos padres tiene cada nodo**, o sea de cuántos otros nodos depende su valor futuro. Es la perilla que decide todo: un nodo con `k` padres tiene una tabla de `2^k`, y ahí está el ahorro. Con `k = n` se recupera el caso denso de siempre. |
+| **Modelo de nodo** | cómo se llena esa tabla — ver abajo |
+| **Topología** | cómo se eligen los padres — ver abajo |
+| **Compuerta** | `aleatoria` sortea una tabla de verdad; o una compuerta con nombre (`and`, `or`, `xor`, `mayoria`) aplicada a los padres. Sólo aplica al modelo binario. |
+
+### Modelo de nodo
+
+Todos producen una tabla de `2^k` valores por nodo. La diferencia es qué valores.
+
+| modelo | qué hace el nodo | valores de la tabla |
+|---|---|---|
+| **binario** | una función booleana fija de sus padres | `0` o `1` |
+| **PBN L=2** / **L=3** | el nodo tiene **ℓ funciones** y en cada paso elige una al azar, con probabilidades que suman 1 | mezcla `Σ cₗ·fₗ`, cualquier valor en `[0,1]` |
+| **ruido ε=0.05** / **ε=0.20** | una sola función, pero la salida **se voltea** con probabilidad ε | sólo `ε` y `1−ε` |
+
+PBN = *Probabilistic Boolean Network* (Shmulevich et al., 2002). Es lo que hace falta
+para que la red tenga probabilidades reales y no sólo `{0,1}` — los datos medidos las
+tienen (N15A tiene 114 valores distintos, frecuencias empíricas).
+
+**Por qué importa el modelo:** con nodos binarios, en el régimen disperso `φ = 0`
+casi siempre. La causa es que `mean_{d}(δᵢ) = (δᵢ(pivote) + δᵢ(pivote ⊕ eᵈ))/2` y el
+primer término es 0 por construcción; con tablas binarias el segundo vale 0 o ±½, así
+que se anula exacto con probabilidad ~¼ por hijo. Con tablas probabilísticas es un
+real genérico y la cancelación exacta es de medida cero.
+
+### Topología
+
+Cómo se eligen los `k` padres de cada nodo.
+
+| modo | qué hace | consecuencia |
+|---|---|---|
+| **aleatoria** | sortea los `k` padres uniformemente | con `k` chico casi siempre resulta **separable** |
+| **anillo** | fija `{i−1, i}` como columna vertebral y sortea los `k−2` restantes | **nunca** es separable |
+
+**Separable** significa que existe un conjunto de dims `A` donde cada nodo tiene
+*todos* o *ninguno* de sus padres. Ese corte da `f = 0` **por construcción**, sin
+importar los valores de las tablas: si `A ∩ padres(i) = ∅`, la cara del nodo colapsa
+a la celda del pivote, donde `δᵢ = 0`. O sea, `φ = 0` trivial.
+
+Medido a n=20: `aleatoria` con `k=2` es separable en **20/20** semillas; `anillo` es
+**0/20** con `k=2`, `3` y `5`.
+
+Por eso el panel lo reporta destacado: un `φ = 0` sobre una red separable no dice
+nada del algoritmo, dice que la red no está integrada.
+
+### El panel de inspección
+
+| columna | qué muestra |
+|---|---|
+| **Fórmulas** | una línea por nodo: `C(A, B) = ⟨A + B⟩⟨¬A + ¬B⟩`. `⟨…⟩` es una cláusula (OR), la yuxtaposición es AND, `¬` es negación. Un nodo PBN se ve como mezcla: `0.7·AC + 0.3·⟨A + B⟩`. |
+| **Adyacencia** | matriz `origen → destino`: un `1` en la fila `A` columna `C` significa que `A` es padre de `C`. |
+| **Diagnóstico** | nodos, fan-in, si las tablas son binarias o probabilísticas, cuánto ahorra la spec contra la TPM, y **si la red es separable**. |
+
+Los nombres de nodo son base-26 estilo hoja de cálculo (`A…Z, AA, AB, …`): el
+alfabeto se agota a 26 y acá se llega a 60+. El nombre **es** el número de variable
+del `.spec.json` escrito en base 26 (`A=1`, `Z=26`, `AA=27`).
+
+**Materializar CSV** deriva la TPM de la spec y la escribe. Es lo que permite correr
+la ruta tradicional sobre la misma red y comparar. Limitado por tamaño.
+
+## Tab Execution
+
+Los selectores van en orden **estrategia → red → patrón**, porque la estrategia
+decide el resto:
+
+- **filtra las redes**: `qsw_fst` declara `necesita_espec`, así que sólo ve las `Ⓢ`;
+  las demás necesitan `🇨`. Si la red elegida deja de ser válida al cambiar de
+  estrategia, se limpia en vez de fallar al ejecutar.
+- **decide las opciones**: debajo aparece un selector por cada opción que la
+  estrategia declara en `SIA.opciones`. Una estrategia sin opciones no muestra nada.
+
+Las opciones entran en el nombre del CSV de salida cuando difieren del default
+(`qsw+modo=exacto`), para que dos corridas distintas no se pisen.
+
+## Tab Dataset
+
+Sigue siendo el lugar de las TPM materializadas y del generador aleatorio de siempre.
+Ahora cada red muestra sus iconos, y al seleccionarla la primera columna abre con el
+veredicto de identificabilidad:
+
+- **Ⓢ tiene especificación** — no hay nada que diagnosticar
+- **IDENTIFICABLE** — se le podría reconstruir una spec compacta
+- **DENSA** — cada nodo depende de todas las dims; no hay compresión posible por conteo
+- **NO IDENTIFICABLE** — las dependencias son más chicas que el ruido de muestreo de
+  la propia TPM (el caso de N15A)

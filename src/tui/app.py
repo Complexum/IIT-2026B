@@ -24,7 +24,7 @@ class MIPApp(App):
     CSS = estilizar()
 
     BINDINGS = [
-        ("s", "show_tab('spec')", "Specification"),
+        ("s", "show_tab('spec')", "Specs"),
         ("d", "show_tab('dataset')", "Dataset"),
         ("t", "show_tab('testing')", "Testing"),
         ("e", "show_tab('execution')", "Execution"),
@@ -36,7 +36,7 @@ class MIPApp(App):
     def compose(self) -> ComposeResult:
         yield IITHeader()
         with TabbedContent(initial="spec"):
-            with TabPane("Specification", id="spec"):
+            with TabPane("Specs", id="spec"):
                 yield SpecScreen()
             with TabPane("Dataset", id="dataset"):
                 yield DatasetScreen()

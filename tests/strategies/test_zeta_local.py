@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from src.iit.core.params import Params
-from src.iit.strategies.python.qn.oracle import f_cara_batch, preparar_oraculo
+from src.iit.strategies.python.qsw.oracle import f_cara_batch, preparar_oraculo
 from src.iit.strategies.python.zeta_local import (
     f_cara_batch_local,
     preparar_oraculo_local,

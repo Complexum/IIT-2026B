@@ -393,11 +393,11 @@ def redes_compatibles(estrategia: str) -> list[tuple[str, str]]:
     grande jamás lo van a tener—. Las demás necesitan el CSV sí o sí.
 
     Filtrar acá evita que la UI ofrezca combinaciones que fallan recién al ejecutar.
-    La etiqueta anota qué tiene cada red: `◆` spec, `▦` csv, `⚡` npy.
+    La etiqueta anota qué tiene cada red: `Ⓢ` spec, `🅒` csv, `⚡` npy.
     """
     from src.iit.strategies.python.sia import SIA
     from src.iit.strategies.runner import importar_estrategias
-    from src.io.manager import capacidades, listar_redes
+    from src.io.manager import capacidades, listar_redes, marcas_de_red
 
     importar_estrategias()
     quiere_espec = SIA.necesita_espec.get(estrategia, False)
@@ -407,10 +407,7 @@ def redes_compatibles(estrategia: str) -> list[tuple[str, str]]:
         cap = capacidades(nombre)
         if estrategia and (not cap["spec"] if quiere_espec else not cap["csv"]):
             continue
-        marcas = "".join(
-            m for m, k in (("◆", "spec"), ("▦", "csv"), ("⚡", "npy")) if cap[k]
-        )
-        salida.append((f"{nombre}  {marcas}", nombre))
+        salida.append((f"{nombre}  {marcas_de_red(nombre)}", nombre))
     return salida
 
 

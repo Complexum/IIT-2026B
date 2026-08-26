@@ -19,14 +19,32 @@ SpecScreen {
     border-bottom: thick $surface-lighten-2;
 }
 
-#spec-toolbar Input {
-    width: 14;
+.campo {
+    width: 16;
+    height: auto;
     margin-right: 2;
 }
 
+.campo-ancho {
+    width: 24;
+}
+
+.campo-label {
+    color: $text-muted;
+    padding-left: 1;
+}
+
+#spec-toolbar Input,
 #spec-toolbar Select {
-    width: 22;
-    margin-right: 2;
+    width: 100%;
+}
+
+#spec-ayuda {
+    height: auto;
+    padding: 0 2 1 2;
+    color: $text-muted;
+    background: $surface;
+    border-bottom: thick $surface-lighten-2;
 }
 
 #spec-toolbar Button {

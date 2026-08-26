@@ -40,6 +40,10 @@ class OpcionesRow(Widget):
     def compose(self) -> ComposeResult:
         p = self.__programa
         opciones = opciones_de_estrategia(p.estrategia)
+        # `Widget.render()` por defecto dibuja el identificador CSS del widget, así
+        # que una fila sin hijos mostraba literalmente "OpcionesRow.opciones-row" y
+        # además ocupaba alto. Con `display = False` desaparece del layout.
+        self.display = bool(opciones)
         if not opciones:
             return
         with Horizontal(classes="card-opciones"):

@@ -17,15 +17,15 @@ class SpecItem(Widget):
             self.name = name
             super().__init__()
 
-    def __init__(self, name: str, materializada: bool, **kwargs) -> None:
+    def __init__(self, name: str, marcas: str = "", **kwargs) -> None:
         super().__init__(**kwargs)
         self.spec_name = name
-        self.materializada = materializada
+        #: Mismo vocabulario que Dataset y Execution: `Ⓢ` spec, `🅒` csv, `⚡` npy.
+        #: Antes usaba `●`/`○`, distinto de los otros tabs y por eso ilegible.
+        self.marcas = marcas
 
     def compose(self) -> ComposeResult:
-        # ● = tiene CSV materializado, ○ = sólo spec
-        marca = "●" if self.materializada else "○"
-        yield Button(f"{marca} {self.spec_name}", classes="spec-name")
+        yield Button(f"{self.spec_name}  {self.marcas}".rstrip(), classes="spec-name")
         yield Button("✕", variant="error", classes="spec-del")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

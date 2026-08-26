@@ -28,6 +28,7 @@ from src.io.fst import (
     tpm_nodo_estado,
 )
 from src.io.generator import REDES_DIR, peso_estimado
+from src.io.manager import capacidades, marcas_de_red
 from src.io.topologia import MODOS
 from src.tui.dataset.modal import DIMS_WARN_THRESHOLD
 from src.tui.shared.consts import estilizar
@@ -57,28 +58,51 @@ class SpecScreen(Widget):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="spec-toolbar"):
-            yield Input(placeholder="Nodos (1-30)", id="inp-n")
-            yield Input(placeholder="Fan-in k", id="inp-k")
-            yield Select(
-                options=[(m, m) for m in MODELOS],
-                value="binario",
-                allow_blank=False,
-                id="sel-modelo",
-            )
-            yield Select(
-                options=[(m, m) for m in MODOS],
-                value="anillo",
-                allow_blank=False,
-                id="sel-topologia",
-            )
-            yield Select(
-                options=[("aleatoria", "aleatoria")]
-                + [(c, c) for c in sorted(COMPUERTAS)],
-                value="aleatoria",
-                allow_blank=False,
-                id="sel-compuerta",
-            )
-            yield Button("+ Nueva", variant="primary", id="btn-nueva-spec")
+            with Vertical(classes="campo"):
+                yield Label("Nodos (n)", classes="campo-label")
+                yield Input(placeholder="1-30", id="inp-n")
+            with Vertical(classes="campo"):
+                yield Label("Fan-in (k)", classes="campo-label")
+                yield Input(placeholder="padres/nodo", id="inp-k")
+            with Vertical(classes="campo campo-ancho"):
+                yield Label("Modelo de nodo", classes="campo-label")
+                yield Select(
+                    options=[(m, m) for m in MODELOS],
+                    value="binario",
+                    allow_blank=False,
+                    id="sel-modelo",
+                )
+            with Vertical(classes="campo campo-ancho"):
+                yield Label("Topología", classes="campo-label")
+                yield Select(
+                    options=[(m, m) for m in MODOS],
+                    value="anillo",
+                    allow_blank=False,
+                    id="sel-topologia",
+                )
+            with Vertical(classes="campo campo-ancho"):
+                yield Label("Compuerta", classes="campo-label")
+                yield Select(
+                    options=[("aleatoria", "aleatoria")]
+                    + [(c, c) for c in sorted(COMPUERTAS)],
+                    value="aleatoria",
+                    allow_blank=False,
+                    id="sel-compuerta",
+                )
+            with Vertical(classes="campo"):
+                yield Label(" ", classes="campo-label")
+                yield Button("+ Nueva", variant="primary", id="btn-nueva-spec")
+
+        yield Static(
+            "[b]n[/b] nodos · [b]k[/b] padres por nodo (fan-in) · "
+            "[b]Modelo[/b]: binario = función determinista; PBN L=ℓ = el nodo elige "
+            "al azar entre ℓ funciones; ruido ε = una función que se voltea con "
+            "probabilidad ε · "
+            "[b]Topología[/b]: anillo garantiza que no exista corte cerrado "
+            "(si existe, φ = 0 sale trivial) · "
+            "[b]Ⓢ[/b] spec  [b]🅒[/b] csv  [b]⚡[/b] npy",
+            id="spec-ayuda",
+        )
 
         with Container(id="spec-main"):
             with VerticalScroll(id="spec-lista"):
@@ -111,9 +135,7 @@ class SpecScreen(Widget):
         for item in lista.query(SpecItem):
             item.remove()
         for nombre in listar_especs():
-            lista.mount(
-                SpecItem(nombre, (REDES_DIR / f"{nombre}.csv").exists())
-            )
+            lista.mount(SpecItem(nombre, marcas_de_red(nombre)))
 
     def on_spec_item_selected(self, event: SpecItem.Selected) -> None:
         self.seleccionada = event.name

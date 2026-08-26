@@ -33,7 +33,7 @@ class NetworkItem(Widget):
     def __init__(self, name: str, marcas: str = "", **kwargs) -> None:
         super().__init__(**kwargs)
         self.network_name = name
-        #: Qué tiene la red: `◆` spec, `▦` csv, `⚡` npy. Una red puede tener sólo
+        #: Qué tiene la red: `Ⓢ` spec, `🅒` csv, `⚡` npy. Una red puede tener sólo
         #: especificación (n grande, donde materializar la TPM es imposible).
         self.marcas = marcas
 

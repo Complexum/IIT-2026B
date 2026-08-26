@@ -41,7 +41,7 @@ Instalación en el nodo con GPU: `uv pip install -e ".[cuda]"`.
 
 import numpy as np
 
-from src.iit.strategies.python.qn.oracle import Oraculo
+from src.iit.strategies.python.qsw.oracle import Oraculo
 from src.iit.strategies.python.qsw.code import QSW
 from src.iit.strategies.python.zeta import pivote_plano
 

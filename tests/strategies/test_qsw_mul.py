@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from src.iit.core.params import Params
-from src.iit.strategies.python.qn.oracle import preparar_oraculo
+from src.iit.strategies.python.qsw.oracle import preparar_oraculo
 from src.iit.strategies.python.qsw.code import QSW
 from src.iit.strategies.python.qsw_mul.code import QSWMUL
 from src.iit.strategies.python.qsw_mul.zeta_mul import preparar_oraculo_mul, repartir

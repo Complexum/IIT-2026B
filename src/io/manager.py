@@ -48,6 +48,24 @@ def capacidades(nombre: str) -> dict[str, bool]:
     }
 
 
+#: Marcador de cada capacidad. **Única definición**: estaba triplicada en
+#: `tui/spec`, `tui/dataset` y `tui/run/helpers`, y cambiarla en dos de tres dejó a
+#: Execution mostrando otros íconos que el resto.
+#:
+#: Los glifos son `Ⓢ Ⓒ Ⓝ` (U+24C8/24B8/24C3, bloque *Enclosed Alphanumerics*), que
+#: son **text-presentation** y miden 1 celda. Evitar los del bloque emoji
+#: (`🅒` U+1F152, `Ⓢ` U+1F1F8): `rich` los cuenta como 1 y el terminal los pinta
+#: como 2, así que la fila se desborda. `Ⓢ` además es un *regional indicator* —
+#: dos adyacentes se fusionan en una bandera.
+MARCAS = (("Ⓢ", "spec"), ("🅒", "csv"), ("Ⓝ", "npy"))
+
+
+def marcas_de_red(nombre: str) -> str:
+    """Marcadores de lo que tiene la red, en orden fijo. Ver `MARCAS`."""
+    cap = capacidades(nombre)
+    return "".join(m for m, clave in MARCAS if cap[clave])
+
+
 def dims_de_red(nombre: str) -> int:
     """n_dims de una red sin cargar el TPM.
 

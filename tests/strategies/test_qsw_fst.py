@@ -55,7 +55,7 @@ class TestEquivalenciaConAnalytic:
             sistema = reducir_a_subsistema(tpm, params)
             if not sistema.dims or not sistema.indices:
                 continue
-            ref = resolver_estrategia(sistema, "analytic").perdida
+            ref = resolver_estrategia(sistema, "analytical").perdida
             got = resolver_estrategia(
                 reducir_espec(espec, params), "qsw_fst", {"modo": modo}
             ).perdida

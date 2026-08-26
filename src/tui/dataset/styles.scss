@@ -87,6 +87,26 @@ NetworkItem.selected .net-name {
     padding: 0 1;
 }
 
+/* ── Barra de identificabilidad (encima de la fila de inputs) ── */
+
+VeredictoBar {
+    height: auto;
+    border: solid $primary;
+    margin: 1 1 0 1;
+    padding: 0 1;
+    background: $surface;
+}
+
+VeredictoBar .col-title {
+    padding-bottom: 0;
+}
+
+#veredicto-text {
+    color: $text;
+}
+
+/* ── Inputs row ── */
+
 #inputs-row {
     height: auto;
     padding: 1 0;

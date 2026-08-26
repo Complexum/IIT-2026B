@@ -26,7 +26,7 @@ import time
 import numpy as np
 
 from src.iit.core.params import Params
-from src.iit.strategies.python.qn.oracle import preparar_oraculo
+from src.iit.strategies.python.qsw.oracle import preparar_oraculo
 from src.iit.strategies.python.qsw_mul.zeta_mul import preparar_oraculo_mul
 from src.io.manager import reducir_a_subsistema
 

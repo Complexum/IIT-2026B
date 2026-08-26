@@ -59,7 +59,7 @@ from src.iit.base.consts import FLOAT_ZERO, INFTY_POS
 from src.iit.base.funcs import emd_efecto
 from src.iit.core.solution import Solution
 from src.iit.strategies.python.fmt import fmt_parts
-from src.iit.strategies.python.qn.oracle import f_cara_batch, preparar_oraculo
+from src.iit.strategies.python.qsw.oracle import f_cara_batch, preparar_oraculo
 from src.iit.strategies.python.sia import SIA
 from src.iit.strategies.python.qsw.backend import resolver_backend, zeta_c
 from src.iit.strategies.python.qsw.muestreo import OraculoMuestreado
