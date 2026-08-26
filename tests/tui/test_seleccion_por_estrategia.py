@@ -56,9 +56,9 @@ class TestFiltro:
 
     def test_la_etiqueta_anota_las_capacidades(self, redes):
         etiquetas = dict((v, e) for e, v in redes_compatibles(""))
-        assert etiquetas["N4A"].endswith("🅒")       # sólo csv
+        assert etiquetas["N4A"].endswith("Ⓒ")       # sólo csv
         assert etiquetas["N4B"].endswith("Ⓢ")       # sólo spec
-        assert etiquetas["N4C"].endswith("Ⓢ🅒")      # las dos
+        assert etiquetas["N4C"].endswith("ⓈⒸ")      # las dos
 
 
 class TestTarjeta:

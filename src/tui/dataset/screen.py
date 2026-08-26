@@ -203,7 +203,7 @@ class DatasetScreen(Widget):
     def on_network_item_deleted(self, event: NetworkItem.Deleted) -> None:
         """Delete button (✕) clicked — remove the CSV/.npy and refresh every tab.
 
-        Una red con `.spec.json` NO desaparece de la lista (sólo pierde 🅒/Ⓝ):
+        Una red con `.spec.json` NO desaparece de la lista (sólo pierde Ⓒ/Ⓝ):
         la spec sigue en disco y es una red válida. Sin el notify esto parecía
         que el borrado fallaba.
         """

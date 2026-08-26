@@ -1,8 +1,8 @@
 """Refresco cruzado entre tabs cuando cambia el estado de las redes en disco.
 
 Una red es un nombre con hasta tres archivos (spec/csv/npy) y tres tabs la
-muestran con sus marcas Ⓢ🅒Ⓝ. Sin este módulo, borrar un CSV desde Dataset
-dejaba a Specs mostrando una marca 🅒 fantasma — cada tab sólo refrescaba su
+muestran con sus marcas ⓈⒸⓃ. Sin este módulo, borrar un CSV desde Dataset
+dejaba a Specs mostrando una marca Ⓒ fantasma — cada tab sólo refrescaba su
 propia lista en sus propios eventos.
 
 Convención: todo tab que muestra redes implementa `refrescar_lista()`; todo tab

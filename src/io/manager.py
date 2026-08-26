@@ -57,7 +57,7 @@ def capacidades(nombre: str) -> dict[str, bool]:
 #: (`🅒` U+1F152, `Ⓢ` U+1F1F8): `rich` los cuenta como 1 y el terminal los pinta
 #: como 2, así que la fila se desborda. `Ⓢ` además es un *regional indicator* —
 #: dos adyacentes se fusionan en una bandera.
-MARCAS = (("Ⓢ", "spec"), ("🅒", "csv"), ("Ⓝ", "npy"))
+MARCAS = (("Ⓢ", "spec"), ("Ⓒ", "csv"), ("Ⓝ", "npy"))
 
 
 def marcas_de_red(nombre: str) -> str:

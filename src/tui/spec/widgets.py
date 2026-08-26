@@ -20,7 +20,7 @@ class SpecItem(Widget):
     def __init__(self, name: str, marcas: str = "", **kwargs) -> None:
         super().__init__(**kwargs)
         self.spec_name = name
-        #: Mismo vocabulario que Dataset y Execution: `Ⓢ` spec, `🅒` csv, `⚡` npy.
+        #: Mismo vocabulario que Dataset y Execution: `Ⓢ` spec, `Ⓒ` csv, `Ⓝ` npy.
         #: Antes usaba `●`/`○`, distinto de los otros tabs y por eso ilegible.
         self.marcas = marcas
 

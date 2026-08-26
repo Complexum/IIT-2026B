@@ -13,6 +13,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Select, Static
 
 from src.tui.dataset.screen import DatasetScreen
+from src.tui.dataset.veredicto import VeredictoBar
 from src.tui.dataset.widgets import NetworkItem
 from src.tui.run.helpers import Programa
 from src.tui.run.widgets import OpcionesRow, ProgramCard
@@ -62,18 +63,27 @@ class TestDatasetNoRompeAlSeleccionar:
         assert "Error" not in texto, texto[:200]
         assert texto.strip()
 
-    def test_el_veredicto_aparece_en_la_columna(self, redes):
+    def test_el_veredicto_aparece_en_la_barra(self, redes):
+        """Desde la extracción a `VeredictoBar` el informe vive en su propia
+        barra sobre la fila de inputs, y la columna vuelve a tener sólo el
+        sistema."""
+
         async def cuerpo(app, pilot):
             item = next(i for i in app.query(NetworkItem) if i.network_name == "N4A")
             item.query_one(".net-name").press()
             await pilot.pause()
             await pilot.pause()
-            return str(app.query_one("#col-completo", Static).content)
+            veredicto = str(
+                app.query_one(VeredictoBar).query_one("#veredicto-text", Static).content
+            )
+            completo = str(app.query_one("#col-completo", Static).content)
+            return veredicto, completo
 
-        texto = _correr(_DatasetApp(), cuerpo)
+        veredicto, completo = _correr(_DatasetApp(), cuerpo)
         assert any(
-            v in texto for v in ("IDENTIFICABLE", "DENSA", "especificación")
-        ), texto[:200]
+            v in veredicto for v in ("IDENTIFICABLE", "DENSA", "especificación")
+        ), veredicto[:200]
+        assert "Indices:" in completo  # la columna quedó sólo con el sistema
 
 
 class _CardApp(App):
@@ -124,7 +134,7 @@ class TestFilaDeOpcionesVacia:
 
 
 class TestIconosConsistentes:
-    """El tab Specification usaba `●`/`○` y los otros dos `Ⓢ🅒⚡`: el mismo estado se
+    """El tab Specification usaba `●`/`○` y los otros dos `ⓈⒸ⚡`: el mismo estado se
     dibujaba distinto según el tab."""
 
     def test_specification_usa_el_mismo_vocabulario(self, redes):
@@ -143,4 +153,4 @@ class TestIconosConsistentes:
 
         marcas = _correr(_SpecApp(), cuerpo)
         assert marcas["N4B"] == "Ⓢ"  # sólo spec
-        assert set("".join(marcas.values())) <= set("Ⓢ🅒⚡")
+        assert set("".join(marcas.values())) <= set("ⓈⒸ⚡")
